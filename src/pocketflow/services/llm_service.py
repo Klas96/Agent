@@ -1,0 +1,273 @@
+"""
+LLM service for PocketFlow.
+
+This module provides LLM functionality with support for multiple providers.
+"""
+
+import openai
+import google.generativeai as genai
+from typing import List, Dict, Any, Optional, Union
+import json
+import time
+
+from ..core.types import AgentAction
+from ..config.settings import get_settings
+from ..utils.errors import LLMError, RetryableError
+from ..utils.logging import get_logger
+
+
+class LLMService:
+    """Service for handling LLM operations."""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self.logger = get_logger("LLMService")
+        self._setup_providers()
+    
+    def _setup_providers(self):
+        """Setup LLM providers based on configuration."""
+        if self.settings.LLM_PROVIDER == "openai":
+            if not self.settings.OPENAI_API_KEY:
+                raise LLMError("OpenAI API key not configured")
+            openai.api_key = self.settings.OPENAI_API_KEY
+        elif self.settings.LLM_PROVIDER == "google":
+            if not self.settings.GOOGLE_API_KEY:
+                raise LLMError("Google API key not configured")
+            genai.configure(api_key=self.settings.GOOGLE_API_KEY)
+    
+    def call_llm(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """
+        Call the LLM with the given messages.
+        
+        Args:
+            messages: List of message dictionaries with 'role' and 'content'
+            **kwargs: Additional parameters for the LLM call
+            
+        Returns:
+            LLM response as string
+            
+        Raises:
+            LLMError: If LLM call fails
+        """
+        try:
+            self.logger.info(f"Calling LLM with {len(messages)} messages")
+            
+            if self.settings.LLM_PROVIDER == "openai":
+                return self._call_openai(messages, **kwargs)
+            elif self.settings.LLM_PROVIDER == "google":
+                return self._call_google(messages, **kwargs)
+            else:
+                raise LLMError(f"Unsupported LLM provider: {self.settings.LLM_PROVIDER}")
+                
+        except Exception as e:
+            self.logger.error(f"LLM call failed: {e}")
+            raise LLMError(f"LLM call failed: {e}")
+    
+    def _call_openai(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Call OpenAI API."""
+        try:
+            response = openai.ChatCompletion.create(
+                model=self.settings.LLM_MODEL,
+                messages=messages,
+                max_tokens=kwargs.get('max_tokens', self.settings.LLM_MAX_TOKENS),
+                temperature=kwargs.get('temperature', self.settings.LLM_TEMPERATURE),
+                timeout=kwargs.get('timeout', self.settings.LLM_TIMEOUT)
+            )
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            if "rate limit" in str(e).lower():
+                raise RetryableError(f"OpenAI rate limit: {e}")
+            raise LLMError(f"OpenAI API error: {e}")
+    
+    def _call_google(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Call Google Generative AI API."""
+        try:
+            model = genai.GenerativeModel(self.settings.LLM_MODEL)
+            
+            # Convert messages to Google format
+            google_messages = []
+            for msg in messages:
+                if msg['role'] == 'user':
+                    google_messages.append(msg['content'])
+                elif msg['role'] == 'assistant':
+                    # For Google API, we need to handle assistant messages differently
+                    # This is a simplified approach
+                    pass
+            
+            # For now, just use the last user message
+            if google_messages:
+                response = model.generate_content(google_messages[-1])
+                return response.text
+            else:
+                raise LLMError("No user messages found")
+                
+        except Exception as e:
+            raise LLMError(f"Google API error: {e}")
+    
+    def extract_actions(self, response: str) -> List[AgentAction]:
+        """
+        Extract actions from LLM response.
+        
+        Args:
+            response: Raw LLM response
+            
+        Returns:
+            List of AgentAction objects
+        """
+        try:
+            self.logger.info("Extracting actions from LLM response")
+            
+            # Try to extract JSON from the response
+            actions = self._extract_json_actions(response)
+            if actions:
+                return actions
+            
+            # Fallback: try to parse as simple action
+            action = self._parse_simple_action(response)
+            if action:
+                return [action]
+            
+            self.logger.warning("No actions found in LLM response")
+            return []
+            
+        except Exception as e:
+            self.logger.error(f"Failed to extract actions: {e}")
+            return []
+    
+    def _extract_json_actions(self, response: str) -> List[AgentAction]:
+        """Extract actions from JSON response."""
+        try:
+            # Look for JSON blocks in the response
+            import re
+            json_match = re.search(r'```json\s*([\s\S]+?)```', response)
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                # Try to find JSON without code blocks
+                json_match = re.search(r'\[[\s\S]*\]', response)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    return []
+            
+            # Parse JSON
+            actions_data = json.loads(json_str)
+            
+            # Convert to AgentAction objects
+            actions = []
+            if isinstance(actions_data, list):
+                for action_data in actions_data:
+                    if isinstance(action_data, dict):
+                        action = AgentAction(
+                            action=action_data.get('action'),
+                            parameters=action_data.get('parameters', {})
+                        )
+                        actions.append(action)
+            elif isinstance(actions_data, dict):
+                action = AgentAction(
+                    action=actions_data.get('action'),
+                    parameters=actions_data.get('parameters', {})
+                )
+                actions.append(action)
+            
+            return actions
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to extract JSON actions: {e}")
+            return []
+    
+    def _parse_simple_action(self, response: str) -> Optional[AgentAction]:
+        """Parse simple action from text response."""
+        try:
+            # Simple keyword-based action extraction
+            response_lower = response.lower()
+            
+            if "generate" in response_lower:
+                return AgentAction(action="generate", parameters={
+                    "type": "sound",
+                    "prompt": response
+                })
+            elif "send" in response_lower:
+                return AgentAction(action="send", parameters={
+                    "body": response
+                })
+            elif "investigate" in response_lower:
+                return AgentAction(action="investigate", parameters={
+                    "query": response
+                })
+            elif "finish" in response_lower:
+                return AgentAction(action="finish", parameters={})
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to parse simple action: {e}")
+            return None
+    
+    def generate_system_prompt(self, context: Dict[str, Any]) -> str:
+        """
+        Generate system prompt based on context.
+        
+        Args:
+            context: Context information for prompt generation
+            
+        Returns:
+            System prompt string
+        """
+        base_prompt = """You are an email assistant. Your job is to help users with their requests.
+
+You can choose one of these actions:
+- send: Reply to the sender or to a specified recipient.
+- generate: Generate content (sound, image, or document).
+  - type: sound, image, or document
+  - prompt: a description of what to generate
+  - duration: (optional, in seconds)
+- investigate: Research a topic or answer a question using web search.
+- finish: End the conversation and trigger a guaranteed response to the sender.
+
+Reply ONLY in JSON format, and nothing else. Do NOT add any text before or after the JSON block.
+
+Example:
+```json
+[
+  {
+    "action": "generate",
+    "parameters": {
+      "type": "sound",
+      "prompt": "A 2-minute song in the style of Daft Punk",
+      "duration": 120
+    }
+  },
+  {
+    "action": "send",
+    "parameters": {
+      "to": "user@example.com",
+      "body": "Here is your requested song!",
+      "attachment": "<generated file>"
+    }
+  },
+  {
+    "action": "finish",
+    "parameters": {}
+  }
+]
+```"""
+        
+        # Add context-specific information
+        if context.get("user_has_tokens"):
+            base_prompt += "\n\nNote: The user has tokens available for content generation."
+        else:
+            base_prompt += "\n\nNote: The user has no tokens. If they request content generation, you should request payment instead."
+        
+        if context.get("last_error"):
+            base_prompt += f"\n\nPrevious error: {context['last_error']}"
+        
+        if context.get("conversation"):
+            base_prompt += f"\n\nConversation history: {context['conversation']}"
+        
+        return base_prompt
+
+
+# Global LLM service instance
+llm_service = LLMService() 

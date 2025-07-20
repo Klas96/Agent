@@ -1,0 +1,107 @@
+# Flow Configuration
+# This file defines different flow types and their requirements
+
+flows:
+  tokened_user_flow:
+    name: "Tokened User Flow"
+    description: "Full functionality for users with tokens"
+    flow_type: "tokened_user"
+    requires_tokens: true
+    timeout: 300
+    steps:
+      - fetch_email
+      - check_user_status
+      - process_agent
+      - validate_tokens
+      - generate_content
+      - consume_tokens
+      - send_email
+    routing:
+      fetch_email:
+        default: check_user_status
+      check_user_status:
+        default: process_agent
+      process_agent:
+        default: validate_tokens
+      validate_tokens:
+        approved: generate_content
+        insufficient: send_email
+      generate_content:
+        default: consume_tokens
+      consume_tokens:
+        default: send_email
+
+  tokenless_user_flow:
+    name: "Tokenless User Flow"
+    description: "Limited functionality for users without tokens"
+    flow_type: "tokenless_user"
+    requires_tokens: false
+    timeout: 180
+    steps:
+      - fetch_email
+      - check_user_status
+      - process_agent
+      - request_payment
+      - send_payment_instructions
+    routing:
+      fetch_email:
+        default: check_user_status
+      check_user_status:
+        default: process_agent
+      process_agent:
+        default: request_payment
+      request_payment:
+        default: send_payment_instructions
+
+  payment_pending_flow:
+    name: "Payment Pending Flow"
+    description: "Flow for users who have requested payment"
+    flow_type: "payment_pending"
+    requires_tokens: false
+    timeout: 60
+    steps:
+      - check_payment_status
+      - process_payment_confirmation
+    routing:
+      check_payment_status:
+        confirmed: process_payment_confirmation
+        pending: end
+
+# Token costs for different actions
+token_costs:
+  generate:
+    sound: 1
+    image: 2
+    document: 1
+    podcast: 3
+    song: 2
+  investigate: 1
+  send: 0  # Free
+
+# Payment amounts for different actions (USD)
+payment_amounts:
+  generate:
+    sound: 0.10
+    image: 0.20
+    document: 0.10
+    podcast: 0.30
+    song: 0.20
+  investigate: 0.05
+  send: 0.00  # Free
+
+# Flow selection rules
+flow_selection:
+  tokened_user:
+    conditions:
+      - user_has_tokens: true
+      - tokens_remaining: "> 0"
+    priority: 1
+  tokenless_user:
+    conditions:
+      - user_has_tokens: false
+    priority: 2
+  payment_pending:
+    conditions:
+      - payment_requested: true
+      - payment_confirmed: false
+    priority: 3 

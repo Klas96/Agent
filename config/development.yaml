@@ -1,0 +1,79 @@
+environment: development
+debug: true
+
+email:
+  host: smtp.gmail.com
+  port: 587
+  username: your-email@gmail.com
+  password: your-app-password
+  use_tls: true
+  from_address: your-email@gmail.com
+  max_emails_per_batch: 5
+
+llm:
+  provider: openai
+  model: gpt-4
+  api_key: your-openai-api-key
+  max_tokens: 4000
+  temperature: 0.7
+  timeout: 60
+
+content:
+  output_directory: ./generated
+  max_duration: 300
+  supported_types:
+    - sound
+    - image
+    - document
+    - podcast
+    - song
+  quality_settings:
+    sound:
+      sample_rate: 44100
+      bit_depth: 16
+    image:
+      resolution: "1024x1024"
+      format: "png"
+    document:
+      format: "pdf"
+      template: "default"
+
+bitcoin:
+  electrum_host: localhost
+  electrum_port: 50001
+  username: null
+  password: null
+  network: mainnet
+  token_price_usd: 0.01
+
+database:
+  url: sqlite:///pocketflow_dev.db
+  pool_size: 5
+  max_overflow: 10
+  echo: true
+
+logging:
+  level: DEBUG
+  format: structured
+  file: logs/pocketflow_dev.log
+  max_size: 10
+  backup_count: 3
+
+flow:
+  timeout: 300
+  max_retries: 3
+  enable_monitoring: true
+  parallel_execution: false
+
+security:
+  greenlist_file: greenlist.yaml
+  allowed_domains:
+    - gmail.com
+    - outlook.com
+  allowed_emails:
+    - admin@example.com
+  require_authentication: true
+
+custom:
+  test_mode: true
+  mock_external_services: false 
