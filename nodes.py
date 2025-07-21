@@ -8,6 +8,7 @@ import time
 from utils.electrum_utils import get_new_btc_address
 import logging
 import json
+import os
 logging.basicConfig(level=logging.INFO)
 from utils.user_db import consume_tokens, get_tokens, add_btc_address, get_btc_addresses
 
@@ -263,7 +264,7 @@ Example:
         sender_email = prep_res["sender_email"]
         shared = prep_res["_shared"]
         task_type = "default"
-        model_key = "default"
+        model_key = os.getenv("LLM_MODEL", "gpt-4o")  # Use environment variable
         if task_type in ("default", "coding"):
             if sender_email and sender_email != "unknown":
                 import logging
@@ -278,11 +279,23 @@ Example:
                     model_key = "local"
                 else:
                     shared["out_of_tokens"] = False
-                    model_key = "default"
+                    model_key = os.getenv("LLM_MODEL", "gpt-4o")  # Use environment variable
         import logging
         try:
             logging.info(f"[AgentNode] Calling LLM for task_type '{task_type}' with model_key '{model_key}'...")
-            response = call_llm(messages, model_key=model_key)
+            # Convert messages to a single prompt string
+            prompt = "\n".join([msg.get("content", "") for msg in messages])
+            
+            # Get user token status and flow type for LLM call
+            user_has_tokens = shared.get("user_has_tokens", True)
+            flow_type = shared.get("flow_type", "tokened_user")
+            
+            response = call_llm(
+                prompt, 
+                model=model_key,
+                user_has_tokens=user_has_tokens,
+                flow_type=flow_type
+            )
             logging.info(f"[AgentNode] Raw LLM response: {response}")
         except Exception as ex:
             logging.error(f"[AgentNode] Exception during LLM call: {ex}")
@@ -294,6 +307,54 @@ Example:
         email = shared.get("email")
         actions = exec_res if exec_res else []
         logging.info(f"[AgentNode] post: exec_res={exec_res}, shared['action_queue']={shared.get('action_queue')}\n")
+        
+        # Check if user is out of tokens - process normally but add token note
+        if shared.get("out_of_tokens", False):
+            logging.info("[AgentNode] User is out of tokens, processing with token note")
+            
+            # Generate a proper response using local LLM
+            user_question = shared.get("conversation", [{}])[-1].get("content", "").strip()
+            if user_question:
+                # Use local LLM to answer the user's question
+                from utils.llm_utils import call_llm
+                try:
+                    original_response = call_llm(f"Answer this question in a friendly, conversational way: {user_question}")
+                except Exception as e:
+                    logging.error(f"[AgentNode] Failed to generate local response: {e}")
+                    original_response = f"I'm a local AI assistant. Here's a simple response to your request: {user_question}"
+            else:
+                original_response = "I'm a local AI assistant. Here's a simple response to your request."
+            
+            # Get or create BTC address for the user
+            email = shared.get("email", {}).get("from")
+            token_note = ""
+            if email:
+                try:
+                    btc_address = get_or_create_btc_address(shared, email)
+                    shared["btc_address"] = btc_address
+                    
+                    # Get current BTC price to calculate token price in BTC
+                    from utils.electrum_utils import get_btc_usd_price
+                    btc_usd_price = get_btc_usd_price()
+                    token_price_usd = 0.01  # $0.01 per token
+                    
+                    if btc_usd_price and btc_address and btc_address != "None":
+                        token_price_btc = token_price_usd / btc_usd_price
+                        tokens_10_price_btc = token_price_btc * 10
+                        token_note = f"\n\n---\nNote: For advanced features like music generation, you'll need tokens. To purchase tokens, send Bitcoin to: {btc_address}\nEach token costs {token_price_btc:.8f} BTC (≈ ${token_price_usd:.2f}). You can purchase 10 tokens for approximately {tokens_10_price_btc:.8f} BTC."
+                    else:
+                        # No fallback address - direct users to contact admin
+                        token_note = "\n\n---\nNote: For advanced features like music generation, you'll need tokens. To purchase tokens, please contact the administrator at admin@klasholmgren.se to get a Bitcoin address. Each token costs approximately $0.01 USD worth of Bitcoin."
+                except Exception as e:
+                    logging.error(f"[AgentNode] Failed to get BTC address: {e}")
+                    token_note = "\n\n---\nNote: For advanced features like music generation, you'll need tokens. To purchase tokens, please contact the administrator at admin@klasholmgren.se to get a Bitcoin address. Each token costs approximately $0.01 USD worth of Bitcoin."
+            else:
+                token_note = "\n\n---\nNote: For advanced features like music generation, you'll need tokens."
+            
+            # Combine original response with token note
+            shared["reply_body"] = original_response + token_note
+            return "finish"  # Go directly to finish for simple responses
+        
         # General output validation: must be a list of dicts with 'action'
         valid = (
             isinstance(actions, list) and
@@ -380,7 +441,16 @@ If the user asks for a song or music, use subtype 'music'.
 If the user asks for a podcast, use subtype 'podcast'.
 Output only the subtype as a single word (e.g., podcast, music, report, essay, photo, drawing).
 """
-        llm_result = call_llm(llm_prompt, model_key="local" if ctype == "sound" else "default")
+        # Get user context for LLM call
+        user_has_tokens = shared.get("user_has_tokens", True)
+        flow_type = shared.get("flow_type", "tokened_user")
+        
+        llm_result = call_llm(
+            llm_prompt, 
+            model_key="local" if ctype == "sound" else "default",
+            user_has_tokens=user_has_tokens,
+            flow_type=flow_type
+        )
         if not isinstance(llm_result, str):
             llm_result = str(llm_result)
         subtype = llm_result.strip().split()[0].lower() if llm_result.strip() else "unknown"
@@ -435,10 +505,16 @@ class ContentParamNode(Node):
             return filename  # Return the filename for attachment
         # For code generation
         if ctype == "code":
-            return call_llm(prompt)
+            # Get user context for LLM call
+            user_has_tokens = shared.get("user_has_tokens", True)
+            flow_type = shared.get("flow_type", "tokened_user")
+            return call_llm(prompt, user_has_tokens=user_has_tokens, flow_type=flow_type)
         # For summarization, Q&A, instructions
         if ctype == "document" and subtype in ("summary", "report"):
-            return call_llm(prompt)
+            # Get user context for LLM call
+            user_has_tokens = shared.get("user_has_tokens", True)
+            flow_type = shared.get("flow_type", "tokened_user")
+            return call_llm(prompt, user_has_tokens=user_has_tokens, flow_type=flow_type)
         print(f"[ContentParamNode] No function implemented for type={ctype}, subtype={subtype}")
         shared['last_error'] = f"No function implemented for type={ctype}, subtype={subtype}"
         return f"No function implemented for type={ctype}, subtype={subtype}"
@@ -582,6 +658,10 @@ class SendEmailNode(Node):
             subject = email.get('subject', '')
         if subject and not subject.lower().startswith('re:'):
             subject = f"Re: {subject}"
+        
+        # Get attachment from shared state or parameters
+        attachment = shared.get('attachment') or params.get('attachment')
+        
         email_data = {
             'to': to,
             'subject': subject,
@@ -589,24 +669,30 @@ class SendEmailNode(Node):
             'user_email': shared.get('user'),
             'in_reply_to': in_reply_to,
             'references': references,
+            'attachment': attachment,
+            'cc': params.get('cc'),
         }
         return email_data
+    
     def exec(self, prep_res):
         logging.info(f"[DEBUG] SendEmailNode.exec called with email_data: {prep_res}")
         print(f"[DEBUG TEST] SendEmailNode.exec received email_data: {prep_res}")
         body = prep_res.get("body")
         if not body or not isinstance(body, str) or not body.strip():
             body = "Sorry, there was an error generating your reply."
+        
         from utils.email_utils import send_email
         send_email(
             prep_res["to"],
             prep_res["subject"],
             body,
-            prep_res["user_email"],
+            attachment_path=prep_res.get("attachment"),  # Pass attachment
+            cc=prep_res.get("cc"),  # Pass CC
             in_reply_to=prep_res.get("in_reply_to"),
-            references=prep_res.get("references"),
+            references=prep_res.get("references")
         )
         return True
+    
     def post(self, shared, prep_res, exec_res):
         logging.info(f"[DEBUG] SendEmailNode.post called with exec_res: {exec_res}")
         if shared is not None:
@@ -632,22 +718,35 @@ class PostProcessNode(Node):
         result["btc_address"] = shared.get("btc_address")
         result["user_email"] = user_email
         result["reply_body"] = shared.get("reply_body", "")
+        result["attachment"] = shared.get("attachment")  # Add attachment support
         return result
+    
     def exec(self, prep_res):
         logging.info(f"[DEBUG] PostProcessNode.exec called with data: {prep_res}")
         if prep_res is None:
             logging.info("[DEBUG] PostProcessNode.exec: No data, returning None.")
             return None
         from utils.email_utils import send_email
+        # Use the sender's email as the recipient for the reply
+        recipient = prep_res.get("user_email") or prep_res.get("from")
+        if not recipient:
+            logging.error("[PostProcessNode] No recipient email found!")
+            return None
+            
+        # Set up proper reply headers
+        in_reply_to = prep_res.get("message_id") or prep_res.get("in_reply_to")
+        references = prep_res.get("message_id") or prep_res.get("references")
+        
         send_email(
-            prep_res["to"],
+            recipient,
             f"Re: {prep_res['subject']}",
             prep_res.get("reply_body", ""),
-            prep_res["user_email"],
-            in_reply_to=prep_res.get("in_reply_to"),
-            references=prep_res.get("references"),
+            attachment_path=prep_res.get("attachment"),  # Pass attachment
+            in_reply_to=in_reply_to,
+            references=references
         )
         return True
+    
     def post(self, shared, prep_res, exec_res):
         logging.info(f"[DEBUG] PostProcessNode.post called with exec_res: {exec_res}")
         if exec_res:
@@ -694,9 +793,14 @@ def get_or_create_btc_address(shared, email):
         return btc_addresses[-1]  # Return the most recent address
     logging.debug(f"[get_or_create_btc_address] No BTC address found for {email}, creating new one.")
     new_address = get_new_btc_address()
-    add_btc_address(email, new_address)
-    logging.debug(f"[get_or_create_btc_address] Created new BTC address for {email}: {new_address}")
-    return new_address
+    if new_address and new_address != "None":
+        add_btc_address(email, new_address)
+        logging.debug(f"[get_or_create_btc_address] Created new BTC address for {email}: {new_address}")
+        return new_address
+    else:
+        # No fallback address - return None when Electrum is not working
+        logging.warning(f"[get_or_create_btc_address] Electrum not working, no BTC address available for {email}")
+        return None
 
 class PurchaseTokensWithBitcoinNode(Node):
     LLM_CALL_PRICE_USD = 0.01  # 1 token = $0.01 (matches LLM call price)

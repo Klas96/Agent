@@ -79,7 +79,7 @@ BTC Wallet Setup:
 - Start the daemon: electrum daemon -d
 
 ---
-EOM 
+EOM
 
 # Ensure requests is installed for BTC price fetching
 pip install requests

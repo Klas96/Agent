@@ -1,4 +1,4 @@
 #!/bin/bash
-source $HOME/electrum-venv/bin/activate
-cd $HOME/PocketFlow
-python main.py
+source /opt/pocketflow/venv/bin/activate
+cd /opt/pocketflow
+exec python main.py

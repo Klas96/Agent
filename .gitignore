@@ -84,3 +84,7 @@ pyproject.toml
 usage.md
 cookbook/pocketflow-minimal-example/viz/flow_visualization.html
 cookbook/pocketflow-minimal-example/viz/flow_visualization.json
+
+user_data/
+user_db.db
+user_data.db

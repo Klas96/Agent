@@ -15,13 +15,19 @@ investigate = InvestigateTopicNode()
 send = SendEmailNode()
 postprocess = PostProcessNode()
 
-fetch >> context >> agent
+# Connect nodes
+fetch >> context
+context >> agent
+# Handle no_email and no_context cases - just end the flow, main.py will restart it
+# fetch - "no_email" >> fetch  # This creates infinite loop
+# context - "no_context" >> fetch  # This would also create infinite loop
 # After agent, always go to pop_action or finish
 agent - "generate" >> pop_action
 agent - "investigate" >> pop_action
 agent - "send" >> pop_action
-agent - "finish" >> pop_action  # Route finish to pop_action for uniformity
-agent >> pop_action
+agent - "finish" >> postprocess  # Route finish directly to postprocess for simple responses
+agent - "default" >> pop_action  # Handle default action
+agent >> pop_action  # Fallback
 # After pop_action, route to the correct node based on action type
 pop_action - "generate" >> content_creator
 pop_action - "send" >> send
