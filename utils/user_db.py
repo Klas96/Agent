@@ -19,6 +19,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             email TEXT PRIMARY KEY,
+            name TEXT,
             tokens INTEGER DEFAULT 10,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -38,14 +39,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-def set_user(email: str, tokens: int = 10):
+def set_user(email: str, name: str = None, tokens: int = 10):
     """Set or update a user."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT OR REPLACE INTO users (email, tokens) VALUES (?, ?)
-    ''', (email, tokens))
+        INSERT OR REPLACE INTO users (email, name, tokens) VALUES (?, ?, ?)
+    ''', (email, name, tokens))
     
     conn.commit()
     conn.close()

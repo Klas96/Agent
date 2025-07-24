@@ -55,7 +55,7 @@ chmod -R 755 /opt/pocketflow
 print_status "Copying source files..."
 cp -r src/* /opt/pocketflow/src/
 cp main.py /opt/pocketflow/
-cp control_panel_minimal.py /opt/pocketflow/
+cp control_panel.py /opt/pocketflow/
 cp requirements.txt /opt/pocketflow/
 
 # Set ownership
@@ -90,6 +90,8 @@ cursor = conn.cursor()
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     email TEXT PRIMARY KEY,
+    name TEXT,
+    personality TEXT,
     tokens INTEGER DEFAULT 10,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -120,15 +122,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
 )
 ''')
 
-# Create greenlist table
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS greenlist (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email_or_domain TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL CHECK(type IN ('email', 'domain')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-''')
+
 
 conn.commit()
 conn.close()
@@ -190,7 +184,7 @@ Environment=PYTHONPATH=/opt/pocketflow/src
 Environment=CONTROL_PANEL_HOST=0.0.0.0
 Environment=CONTROL_PANEL_PORT=5001
 Environment=CONTROL_PANEL_DEBUG=false
-ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/control_panel_minimal.py
+ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/control_panel.py
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10

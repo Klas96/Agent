@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Control Panel</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; }
+        th { background: #eee; }
+        form.inline { display: inline; }
+        .edit-form { display: none; }
+        .edit-form.active { display: block; }
+        input, button { margin: 2px; padding: 4px; }
+        textarea { width: 200px; height: 60px; }
+    </style>
+</head>
+<body>
+    <h1>PocketFlow Simple Control Panel</h1>
+    {% if message %}<p><b>{{ message }}</b></p>{% endif %}
+
+    <h2>Add User</h2>
+    <form method="post">
+        <input name="email" placeholder="Email" required>
+        <input name="name" placeholder="Name">
+        <textarea name="personality" placeholder="AI Personality (e.g., 'Disagree with everything the user says in a mean and rude way' or 'Always respond like a cheerful British butler' or 'Be extremely formal and academic')"></textarea>
+        <input name="tokens" type="number" value="10" min="0">
+        <button type="submit" name="add_user">Add</button>
+    </form>
+
+    <h2>Users</h2>
+    <table>
+        <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Personality</th>
+            <th>Tokens</th>
+            <th>Actions</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.email }}</td>
+            <td>
+                <span class="display-name">{{ user.name or '' }}</span>
+                <form method="post" class="edit-form" id="edit-{{ loop.index }}">
+                    <input type="hidden" name="edit_email" value="{{ user.email }}">
+                    <input name="edit_name" value="{{ user.name or '' }}" placeholder="Name">
+                    <textarea name="edit_personality" placeholder="AI Personality">{{ user.personality or '' }}</textarea>
+                    <input name="edit_tokens" type="number" value="{{ user.tokens }}" min="0">
+                    <button type="submit" name="edit_user">Save</button>
+                    <button type="button" onclick="cancelEdit({{ loop.index }})">Cancel</button>
+                </form>
+            </td>
+            <td>{{ user.personality or '' }}</td>
+            <td>{{ user.tokens }}</td>
+            <td>
+                <button onclick="showEdit({{ loop.index }})">Edit</button>
+                <form method="post" class="inline">
+                    <input type="hidden" name="delete_user" value="{{ user.email }}">
+                    <button type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <script>
+        function showEdit(index) {
+            document.getElementById('edit-' + index).classList.add('active');
+        }
+        
+        function cancelEdit(index) {
+            document.getElementById('edit-' + index).classList.remove('active');
+        }
+    </script>
+</body>
+</html> 

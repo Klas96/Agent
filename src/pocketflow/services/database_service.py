@@ -47,6 +47,8 @@ class DatabaseService:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     email TEXT PRIMARY KEY,
+                    name TEXT,
+                    personality TEXT,
                     tokens INTEGER DEFAULT 10,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -103,7 +105,7 @@ class DatabaseService:
             cursor = conn.cursor()
             
             cursor.execute('''
-                SELECT email, tokens, created_at, updated_at 
+                SELECT email, name, personality, tokens, created_at, updated_at 
                 FROM users WHERE email = ?
             ''', (email,))
             
@@ -113,9 +115,11 @@ class DatabaseService:
             if result:
                 return User(
                     email=result[0],
-                    tokens=result[1],
-                    created_at=result[2],
-                    updated_at=result[3]
+                    name=result[1],
+                    personality=result[2],
+                    tokens=result[3],
+                    created_at=result[4],
+                    updated_at=result[5]
                 )
             return None
             
@@ -123,16 +127,16 @@ class DatabaseService:
             self.logger.error(f"Failed to get user {email}: {e}")
             raise DatabaseError(f"Failed to get user: {e}")
     
-    def create_user(self, email: str, tokens: int = 10) -> User:
+    def create_user(self, email: str, name: Optional[str] = None, personality: Optional[str] = None, tokens: int = 10) -> User:
         """Create a new user."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             cursor.execute('''
-                INSERT OR REPLACE INTO users (email, tokens, updated_at) 
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            ''', (email, tokens))
+                INSERT OR REPLACE INTO users (email, name, personality, tokens, updated_at) 
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (email, name, personality, tokens))
             
             conn.commit()
             conn.close()
@@ -196,11 +200,36 @@ class DatabaseService:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Added {amount} tokens to {email}")
+            self.logger.info(f"Added {amount} tokens for {email}")
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to add tokens to {email}: {e}")
+            self.logger.error(f"Failed to add tokens for {email}: {e}")
+            return False
+    
+    def update_user_personality(self, email: str, personality: Optional[str] = None) -> bool:
+        """Update user personality."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                UPDATE users SET personality = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE email = ?
+            ''', (personality, email))
+            
+            if cursor.rowcount == 0:
+                conn.close()
+                return False
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Updated personality for {email}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update personality for {email}: {e}")
             return False
     
     def add_btc_address(self, email: str, address: str) -> bool:

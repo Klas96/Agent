@@ -48,19 +48,7 @@
         </div>
     </div>
     
-    <div class="col-md-3">
-        <div class="stats-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <h3 class="mb-0">{{ stats.greenlist_emails + stats.greenlist_domains }}</h3>
-                    <p class="mb-0">Greenlist Entries</p>
-                </div>
-                <div class="align-self-center">
-                    <i class="fas fa-shield-alt fa-2x"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+
 </div>
 
 <div class="row">
@@ -73,20 +61,16 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-6 mb-3">
-                        <a href="{{ url_for('admin.add_user') }}" class="btn btn-primary w-100">
+                        <a href="{{ url_for('admin.add_user_page') }}" class="btn btn-primary w-100">
                             <i class="fas fa-user-plus"></i> Add User
                         </a>
                     </div>
                     <div class="col-6 mb-3">
-                        <a href="{{ url_for('admin.users') }}" class="btn btn-info w-100">
+                        <a href="{{ url_for('admin.users_list') }}" class="btn btn-info w-100">
                             <i class="fas fa-users"></i> Manage Users
                         </a>
                     </div>
-                    <div class="col-6 mb-3">
-                        <a href="{{ url_for('admin.greenlist') }}" class="btn btn-warning w-100">
-                            <i class="fas fa-shield-alt"></i> Manage Greenlist
-                        </a>
-                    </div>
+
                     <div class="col-6 mb-3">
                         <a href="{{ url_for('admin.api_users') }}" class="btn btn-secondary w-100">
                             <i class="fas fa-code"></i> API Endpoints

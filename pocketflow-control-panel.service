@@ -13,7 +13,7 @@ Environment=PYTHONPATH=/opt/pocketflow/src
 Environment=CONTROL_PANEL_HOST=0.0.0.0
 Environment=CONTROL_PANEL_PORT=5001
 Environment=CONTROL_PANEL_DEBUG=false
-ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/control_panel_minimal.py
+ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/control_panel.py
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=10

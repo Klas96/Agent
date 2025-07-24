@@ -160,7 +160,17 @@ class AgentNode(SimpleNode):
         Returns:
             System prompt string
         """
-        base_prompt = f"""You are an email assistant. The sender of the current email is: {sender_email}
+        # Get user personality from database
+        personality_instruction = ""
+        try:
+            from ..web.routes import get_user_by_email
+            user = get_user_by_email(sender_email)
+            if user and user.get("personality"):
+                personality_instruction = f"\n\nIMPORTANT: When responding, you must behave as follows: {user['personality']}"
+        except Exception as e:
+            self.logger.warning(f"Could not get user personality for {sender_email}: {e}")
+        
+        base_prompt = f"""You are an email assistant. The sender of the current email is: {sender_email}{personality_instruction}
 
 Your job is to answer the user's email above as helpfully and conversationally as possible.
 

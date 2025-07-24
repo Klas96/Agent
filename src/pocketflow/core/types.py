@@ -114,6 +114,8 @@ class PaymentRequest(BaseModel):
 class User(BaseModel):
     """User data structure."""
     email: str = Field(description="User email address")
+    name: Optional[str] = Field(default=None, description="User's name")
+    personality: Optional[str] = Field(default=None, description="User's AI personality preference")
     tokens: int = Field(description="Number of tokens available")
     created_at: str = Field(description="When user was created")
     updated_at: str = Field(description="When user was last updated")

@@ -4,7 +4,7 @@
 {% block page_title %}Add New User{% endblock %}
 
 {% block page_actions %}
-<a href="{{ url_for('admin.users') }}" class="btn btn-secondary">
+<a href="{{ url_for('admin.users_list') }}" class="btn btn-secondary">
     <i class="fas fa-arrow-left"></i> Back to Users
 </a>
 {% endblock %}
@@ -28,16 +28,27 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
+                                <label for="userName" class="form-label">Name (Optional)</label>
+                                <input type="text" class="form-control" id="userName" placeholder="User's full name">
+                                <div class="form-text">The user's display name</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
                                 <label for="userTokens" class="form-label">Initial Tokens</label>
                                 <input type="number" class="form-control" id="userTokens" value="10" min="0">
                                 <div class="form-text">Number of tokens to give the user initially</div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="userNotes" class="form-label">Notes (Optional)</label>
-                        <textarea class="form-control" id="userNotes" rows="3" placeholder="Any additional notes about this user..."></textarea>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="userNotes" class="form-label">Notes (Optional)</label>
+                                <textarea class="form-control" id="userNotes" rows="3" placeholder="Any additional notes about this user..."></textarea>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="alert alert-info">
@@ -99,6 +110,7 @@ $(document).ready(function() {
         e.preventDefault();
         
         const email = $('#userEmail').val().trim();
+        const name = $('#userName').val().trim();
         const tokens = parseInt($('#userTokens').val()) || 0;
         const notes = $('#userNotes').val().trim();
         
@@ -115,31 +127,37 @@ $(document).ready(function() {
         const $btn = $('#addUserForm button[type="submit"]');
         showLoading($btn);
         
-        $.ajax({
-            url: '/admin/users/add',
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                email: email,
-                tokens: tokens,
-                notes: notes
-            }),
-            success: function(data) {
-                hideLoading($btn);
-                if (data.success) {
-                    showAlert('User created successfully!', 'success');
-                    setTimeout(() => {
-                        window.location.href = '/admin/users';
-                    }, 1500);
-                } else {
-                    showAlert(data.error || 'Failed to create user', 'danger');
-                }
-            },
-            error: function() {
-                hideLoading($btn);
-                showAlert('Failed to create user', 'danger');
-            }
-        });
+        // Submit the form normally (not via AJAX)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/admin/users/add';
+        
+        const emailInput = document.createElement('input');
+        emailInput.type = 'hidden';
+        emailInput.name = 'email';
+        emailInput.value = email;
+        form.appendChild(emailInput);
+        
+        const nameInput = document.createElement('input');
+        nameInput.type = 'hidden';
+        nameInput.name = 'name';
+        nameInput.value = name;
+        form.appendChild(nameInput);
+        
+        const tokensInput = document.createElement('input');
+        tokensInput.type = 'hidden';
+        tokensInput.name = 'initial_tokens';
+        tokensInput.value = tokens;
+        form.appendChild(tokensInput);
+        
+        const notesInput = document.createElement('input');
+        notesInput.type = 'hidden';
+        notesInput.name = 'notes';
+        notesInput.value = notes;
+        form.appendChild(notesInput);
+        
+        document.body.appendChild(form);
+        form.submit();
     });
     
     // Email validation
