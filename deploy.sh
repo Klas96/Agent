@@ -1,8 +1,9 @@
 #!/bin/bash
-set -e
 
 # PocketFlow Deployment Script
-# Deploys the new modular architecture from development to production
+# This script deploys PocketFlow with the control panel
+
+set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -27,254 +28,233 @@ print_header() {
     echo -e "${BLUE}=== $1 ===${NC}"
 }
 
-# Configuration
-DEV_DIR="/home/klas/PocketFlow"
-PROD_DIR="/opt/pocketflow"
-SERVICE_NAME="pocketflow"
-BACKUP_DIR="$PROD_DIR/backups"
-
-print_header "PocketFlow Deployment"
-print_status "Deploying new modular architecture to production..."
-
-# Check if we're in the development directory
-if [ ! -f "$DEV_DIR/main.py" ]; then
-    print_error "Development directory not found: $DEV_DIR"
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    print_error "This script must be run as root (use sudo)"
     exit 1
 fi
 
-# Check if src directory exists (new architecture)
-if [ ! -d "$DEV_DIR/src" ]; then
-    print_error "New architecture src directory not found: $DEV_DIR/src"
-    print_error "Please ensure the new modular architecture is properly set up"
-    exit 1
+print_header "PocketFlow Deployment with Control Panel"
+
+# Create pocketflow user if it doesn't exist
+if ! id "pocketflow" &>/dev/null; then
+    print_status "Creating pocketflow user..."
+    useradd -r -s /bin/false -d /opt/pocketflow pocketflow
 fi
 
-# Check if production directory exists
-if [ ! -d "$PROD_DIR" ]; then
-    print_error "Production directory not found: $PROD_DIR"
-    print_status "Run install-system.sh first to create production installation"
-    exit 1
+# Create directories
+print_status "Creating directories..."
+mkdir -p /opt/pocketflow/{src,data,logs,venv}
+mkdir -p /opt/pocketflow/src/pocketflow/{core,nodes,services,flows,config,utils,web}
+
+# Set permissions
+chown -R pocketflow:pocketflow /opt/pocketflow
+chmod -R 755 /opt/pocketflow
+
+# Copy source files
+print_status "Copying source files..."
+cp -r src/* /opt/pocketflow/src/
+cp main.py /opt/pocketflow/
+cp control_panel_minimal.py /opt/pocketflow/
+cp requirements.txt /opt/pocketflow/
+
+# Set ownership
+chown -R pocketflow:pocketflow /opt/pocketflow
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "/opt/pocketflow/venv/bin" ]; then
+    print_status "Creating virtual environment..."
+    sudo -u pocketflow python3 -m venv /opt/pocketflow/venv
 fi
 
-# Create backup directory
-mkdir -p "$BACKUP_DIR"
-BACKUP_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_NAME="pocketflow_backup_$BACKUP_TIMESTAMP"
+# Install dependencies
+print_status "Installing Python dependencies..."
+sudo -u pocketflow /opt/pocketflow/venv/bin/pip install --upgrade pip
+sudo -u pocketflow /opt/pocketflow/venv/bin/pip install flask flask-cors pydantic pydantic-settings PyYAML
 
-print_header "Creating Backup"
-print_status "Creating backup: $BACKUP_NAME"
+# Install PocketFlow dependencies (minimal set for control panel)
+print_status "Installing PocketFlow dependencies..."
+sudo -u pocketflow /opt/pocketflow/venv/bin/pip install openai anthropic google-generativeai requests
 
-# Backup production files
-sudo tar -czf "$BACKUP_DIR/$BACKUP_NAME.tar.gz" \
-    --exclude="venv" \
-    --exclude="__pycache__" \
-    --exclude="backups" \
-    --exclude="*.pyc" \
-    -C "$PROD_DIR" .
+# Create database if it doesn't exist
+if [ ! -f "/opt/pocketflow/data/pocketflow.db" ]; then
+    print_status "Initializing database..."
+    sudo -u pocketflow /opt/pocketflow/venv/bin/python -c "
+import sqlite3
+import os
+os.makedirs('/opt/pocketflow/data', exist_ok=True)
+conn = sqlite3.connect('/opt/pocketflow/data/pocketflow.db')
+cursor = conn.cursor()
 
-print_status "Backup created: $BACKUP_DIR/$BACKUP_NAME.tar.gz"
+# Create users table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    email TEXT PRIMARY KEY,
+    tokens INTEGER DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
 
-# Check if service is running
-print_header "Checking Service Status"
-if systemctl is-active $SERVICE_NAME >/dev/null 2>&1; then
-    print_status "Service is running, will restart after deployment"
-    SERVICE_RUNNING=true
-else
-    print_status "Service is not running"
-    SERVICE_RUNNING=false
+# Create btc_addresses table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS btc_addresses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    address TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (email) REFERENCES users(email)
+)
+''')
+
+# Create payment_transactions table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS payment_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    amount_btc REAL NOT NULL,
+    amount_usd REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (email) REFERENCES users(email)
+)
+''')
+
+# Create greenlist table
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS greenlist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_or_domain TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK(type IN ('email', 'domain')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
+
+conn.commit()
+conn.close()
+print('Database initialized successfully')
+"
 fi
 
-# Stop service if running
-if [ "$SERVICE_RUNNING" = true ]; then
-    print_status "Stopping service..."
-    sudo systemctl stop $SERVICE_NAME
-    sleep 2
-fi
+# Install systemd services
+print_status "Installing systemd services..."
 
-# Deploy files
-print_header "Deploying Files"
-print_status "Copying new modular architecture..."
-
-# Copy main application file
-sudo cp "$DEV_DIR/main.py" "$PROD_DIR/"
-
-# Copy new modular architecture
-sudo cp -r "$DEV_DIR/src/" "$PROD_DIR/"
-
-# Copy configuration files
-sudo cp "$DEV_DIR/.env" "$PROD_DIR/" 2>/dev/null || print_warning ".env not found in dev"
-
-# Copy requirements and other necessary files
-sudo cp "$DEV_DIR/requirements.txt" "$PROD_DIR/" 2>/dev/null || print_warning "requirements.txt not found"
-sudo cp "$DEV_DIR/requirements-no-torch.txt" "$PROD_DIR/" 2>/dev/null || print_warning "requirements-no-torch.txt not found"
-
-# Copy scripts directory
-sudo cp -r "$DEV_DIR/scripts/" "$PROD_DIR/" 2>/dev/null || print_warning "scripts directory not found"
-
-# Copy config directory
-sudo cp -r "$DEV_DIR/config/" "$PROD_DIR/" 2>/dev/null || print_warning "config directory not found"
-
-# Copy utils directory (legacy support)
-sudo cp -r "$DEV_DIR/utils/"* "$PROD_DIR/utils/" 2>/dev/null || print_warning "utils directory not found"
-
-# Set proper permissions
-print_status "Setting permissions..."
-sudo chown -R pocketflow:pocketflow "$PROD_DIR"
-
-# Update Python dependencies
-print_header "Updating Dependencies"
-print_status "Activating virtual environment..."
-source "$PROD_DIR/venv/bin/activate"
-
-print_status "Upgrading pip..."
-pip install --upgrade pip
-
-print_status "Installing new architecture dependencies..."
-# Install pydantic-settings for new architecture
-pip install pydantic-settings
-
-# Install other dependencies
-if [ -f "$PROD_DIR/requirements.txt" ]; then
-    pip install -r "$PROD_DIR/requirements.txt"
-else
-    print_warning "requirements.txt not found, installing basic dependencies..."
-    pip install numpy openai google-generativeai anthropic requests python-dotenv pydantic pydantic-settings
-fi
-
-# Update startup script for new architecture
-print_header "Updating Startup Script"
-cat > "$PROD_DIR/run_app.sh" << 'EOF'
-#!/bin/bash
-source /opt/pocketflow/venv/bin/activate
-cd /opt/pocketflow
-export PYTHONPATH="${PYTHONPATH}:/opt/pocketflow/src"
-exec python main.py
-EOF
-chmod +x "$PROD_DIR/run_app.sh"
-
-# Update systemd service for new architecture
-print_header "Updating Systemd Service"
-SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
-
-sudo bash -c "cat > $SERVICE_FILE" << EOF
+# Main PocketFlow service
+cat > /etc/systemd/system/pocketflow.service << 'EOF'
 [Unit]
-Description=PocketFlow Email Agent and BTC Service (New Architecture)
+Description=PocketFlow Email Processing Agent
 After=network.target
 
 [Service]
 Type=simple
 User=pocketflow
-WorkingDirectory=$PROD_DIR
-ExecStart=$PROD_DIR/run_app.sh
-Restart=on-failure
+Group=pocketflow
+WorkingDirectory=/opt/pocketflow
+Environment=PATH=/opt/pocketflow/venv/bin
+Environment=PYTHONPATH=/opt/pocketflow/src
+ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/main.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
 RestartSec=10
-Environment=PYTHONPATH=$PROD_DIR:$PROD_DIR/src
-Environment=BTC_SHARED_PATH=$PROD_DIR/data/shared.yaml
-EnvironmentFile=$PROD_DIR/.env
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pocketflow/data /opt/pocketflow/logs
 
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=$SERVICE_NAME
+SyslogIdentifier=pocketflow
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Control Panel service
+cat > /etc/systemd/system/pocketflow-control-panel.service << 'EOF'
+[Unit]
+Description=PocketFlow Control Panel
+After=network.target pocketflow.service
+Wants=pocketflow.service
+
+[Service]
+Type=simple
+User=pocketflow
+Group=pocketflow
+WorkingDirectory=/opt/pocketflow
+Environment=PATH=/opt/pocketflow/venv/bin
+Environment=PYTHONPATH=/opt/pocketflow/src
+Environment=CONTROL_PANEL_HOST=0.0.0.0
+Environment=CONTROL_PANEL_PORT=5001
+Environment=CONTROL_PANEL_DEBUG=false
+ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/control_panel_minimal.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pocketflow/data /opt/pocketflow/logs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pocketflow-control-panel
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 # Reload systemd
-print_status "Reloading systemd daemon..."
-sudo systemctl daemon-reload
+systemctl daemon-reload
 
-# Test the deployment
-print_header "Testing Deployment"
-print_status "Testing basic functionality..."
+# Enable and start services
+print_status "Starting services..."
+systemctl enable pocketflow.service
+systemctl enable pocketflow-control-panel.service
 
-# Test imports for new modular architecture
-if sudo -u pocketflow /opt/pocketflow/venv/bin/python -c "
-import sys
-sys.path.append('/opt/pocketflow')
-try:
-    from src.pocketflow import flow_manager, get_settings
-    print('✓ New modular architecture working')
-except Exception as e:
-    print(f'✗ New architecture error: {e}')
-    exit(1)
-" 2>/dev/null; then
-    print_status "✓ New modular architecture working"
+# Start services
+systemctl start pocketflow.service
+systemctl start pocketflow-control-panel.service
+
+# Wait a moment for services to start
+sleep 5
+
+# Check service status
+print_status "Checking service status..."
+if systemctl is-active --quiet pocketflow.service; then
+    print_status "✅ PocketFlow service is running"
 else
-    print_error "✗ New architecture issues detected"
-    print_status "Restoring from backup..."
-    sudo tar -xzf "$BACKUP_DIR/$BACKUP_NAME.tar.gz" -C "$PROD_DIR"
-    exit 1
+    print_error "❌ PocketFlow service failed to start"
+    systemctl status pocketflow.service
 fi
 
-# Start service if it was running before
-if [ "$SERVICE_RUNNING" = true ]; then
-    print_header "Restarting Service"
-    print_status "Starting service..."
-    sudo systemctl start $SERVICE_NAME
-    
-    # Wait a moment and check status
-    sleep 3
-    if systemctl is-active $SERVICE_NAME >/dev/null 2>&1; then
-        print_status "✓ Service started successfully"
-    else
-        print_error "✗ Service failed to start"
-        print_status "Check logs with: journalctl -u $SERVICE_NAME -f"
-    fi
+if systemctl is-active --quiet pocketflow-control-panel.service; then
+    print_status "✅ PocketFlow Control Panel service is running"
 else
-    print_status "Service was not running, not starting it"
+    print_error "❌ PocketFlow Control Panel service failed to start"
+    systemctl status pocketflow-control-panel.service
 fi
 
-# Clean up old backups (keep last 5)
-print_header "Cleaning Up"
-BACKUP_COUNT=$(sudo ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
-if [ "$BACKUP_COUNT" -gt 5 ]; then
-    print_status "Removing old backups (keeping last 5)..."
-    sudo ls -t "$BACKUP_DIR"/*.tar.gz | tail -n +6 | sudo xargs rm -f
-fi
+print_header "Deployment Complete!"
 
-# Print deployment summary
-print_header "Deployment Summary"
-cat << EOM
-
-🎉 PocketFlow Deployment Complete!
-
-📁 Development: $DEV_DIR
-🏢 Production: $PROD_DIR
-🔧 Service: $SERVICE_NAME
-📦 Backup: $BACKUP_NAME.tar.gz
-🏗️ Architecture: New Modular (src/pocketflow/)
-
-📋 Service Status:
-EOM
-
-if systemctl is-active $SERVICE_NAME >/dev/null 2>&1; then
-    echo "✓ Service is running"
-else
-    echo "⚠ Service is not running"
-fi
-
-cat << EOM
-
-📊 Useful Commands:
-- Check status: sudo systemctl status $SERVICE_NAME
-- View logs: journalctl -u $SERVICE_NAME -f
-- Restart service: sudo systemctl restart $SERVICE_NAME
-- Stop service: sudo systemctl stop $SERVICE_NAME
-
-🔄 Rollback (if needed):
-- Stop service: sudo systemctl stop $SERVICE_NAME
-- Restore backup: sudo tar -xzf $BACKUP_DIR/$BACKUP_NAME.tar.gz -C $PROD_DIR
-- Restart service: sudo systemctl start $SERVICE_NAME
-
-🏗️ New Architecture Features:
-- Modular design with src/pocketflow/
-- Service layer abstraction
-- Improved error handling
-- Better configuration management
-- Database service integration
-
-EOM
-
-print_status "Deployment completed successfully!" 
+print_status "Services installed and running:"
+echo "  • PocketFlow Agent: http://localhost:5000 (if configured)"
+echo "  • Control Panel: http://localhost:5001/admin/"
+echo ""
+print_status "Service management commands:"
+echo "  • View status: sudo systemctl status pocketflow pocketflow-control-panel"
+echo "  • Stop services: sudo systemctl stop pocketflow pocketflow-control-panel"
+echo "  • Start services: sudo systemctl start pocketflow pocketflow-control-panel"
+echo "  • Restart services: sudo systemctl restart pocketflow pocketflow-control-panel"
+echo "  • View logs: sudo journalctl -u pocketflow -f"
+echo "  • View control panel logs: sudo journalctl -u pocketflow-control-panel -f"
+echo ""
+print_status "Access the control panel at: http://localhost:5001/admin/"
+print_status "Default port is 5001 to avoid conflicts with other services" 
