@@ -79,23 +79,32 @@ def get_new_btc_address() -> Optional[str]:
     """
     logger.info("Getting new BTC address from Electrum wallet")
     
-    # First, ensure wallet is loaded
-    wallet_status = call_electrum_rpc("is_loaded")
-    if not wallet_status:
-        logger.warning("Wallet not loaded, attempting to load")
-        load_result = call_electrum_rpc("load_wallet")
-        if not load_result:
-            logger.error("Failed to load wallet")
+    try:
+        # Use offline mode to generate address directly
+        import subprocess
+        import os
+        
+        # Get the wallet path - use user_wallet instead of default_wallet
+        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
+        
+        # Run electrum command to create new address
+        result = subprocess.run([
+            "/opt/pocketflow/venv/bin/electrum",
+            "--wallet", wallet_path,
+            "createnewaddress",
+            "--offline"
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            address = result.stdout.strip()
+            logger.info(f"Generated new BTC address: {address}")
+            return address
+        else:
+            logger.error(f"Failed to generate BTC address: {result.stderr}")
             return None
-    
-    # Get new address
-    result = call_electrum_rpc("createnewaddress")
-    if result:
-        address = result
-        logger.info(f"Generated new BTC address: {address}")
-        return address
-    else:
-        logger.error("Failed to generate new BTC address")
+            
+    except Exception as e:
+        logger.error(f"Failed to generate BTC address: {e}")
         return None
 
 def get_btc_balance() -> Optional[float]:

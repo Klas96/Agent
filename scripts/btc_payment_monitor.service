@@ -1,0 +1,26 @@
+[Unit]
+Description=PocketFlow Bitcoin Payment Monitor
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pocketflow
+Group=pocketflow
+WorkingDirectory=/opt/pocketflow
+Environment=PYTHONPATH=/opt/pocketflow
+ExecStart=/opt/pocketflow/venv/bin/python /opt/pocketflow/utils/credit_tokens_from_btc.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pocketflow/data
+
+[Install]
+WantedBy=multi-user.target 

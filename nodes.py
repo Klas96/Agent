@@ -791,7 +791,20 @@ def get_or_create_btc_address(shared, email):
     if btc_addresses:
         logging.debug(f"[get_or_create_btc_address] Found existing BTC address for {email}: {btc_addresses[-1]}")
         return btc_addresses[-1]  # Return the most recent address
-    logging.debug(f"[get_or_create_btc_address] No BTC address found for {email}, creating new one.")
+    
+    logging.debug(f"[get_or_create_btc_address] No BTC address found for {email}, using admin addresses.")
+    
+    # If no addresses found for this user, use addresses from admin user
+    admin_addresses = get_btc_addresses("admin@klasholmgren.se")
+    if admin_addresses:
+        # Assign one of the admin addresses to this user
+        import random
+        selected_address = random.choice(admin_addresses)
+        add_btc_address(email, selected_address)
+        logging.debug(f"[get_or_create_btc_address] Assigned admin BTC address for {email}: {selected_address}")
+        return selected_address
+    
+    # Fallback: try to generate new address
     new_address = get_new_btc_address()
     if new_address and new_address != "None":
         add_btc_address(email, new_address)
