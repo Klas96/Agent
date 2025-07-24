@@ -10,7 +10,7 @@ from ..core.flow import Flow, FlowBuilder
 from ..core.types import FlowType, SharedState
 from ..nodes import (
     PurchaseTokensWithBitcoinNode,
-    SendEmailNode
+    SendEmailNode, FinishNode
 )
 from ..utils.logging import get_logger
 
@@ -27,6 +27,7 @@ class PaymentProcessingFlow:
         return (FlowBuilder("payment_processing", FlowType.PAYMENT_PENDING, requires_tokens=False)
                 .add_step("payment_request", PurchaseTokensWithBitcoinNode("payment_request"))
                 .add_step("send_email", SendEmailNode("send_email"))
+                .add_step("finish", FinishNode("finish"))
                 .set_start("payment_request")
                 .add_end_step("send_email")
                 .add_end_step("finish")

@@ -30,7 +30,8 @@ from .services import (
     llm_service,
     content_service,
     bitcoin_service,
-    websearch_service
+    websearch_service,
+    database_service
 )
 
 # Node imports

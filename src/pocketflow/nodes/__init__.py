@@ -37,6 +37,13 @@ from .user_status import (
     FlowTypeRouterNode
 )
 
+from ..core.node import SimpleNode
+
+class FinishNode(SimpleNode):
+    """A simple terminal node for flow completion."""
+    def process(self, shared):
+        return {"route": "finish"}
+
 __all__ = [
     # Email nodes
     "FetchEmailNode",
@@ -64,4 +71,5 @@ __all__ = [
     "PaymentRequestNode",
     "TokenConsumptionNode",
     "FlowTypeRouterNode",
+    "FinishNode",
 ] 

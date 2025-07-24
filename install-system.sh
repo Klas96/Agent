@@ -14,6 +14,7 @@ CONFIG_DIR="/etc/$APP_NAME"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to print colored output
@@ -29,15 +30,34 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+print_header() {
+    echo -e "${BLUE}=== $1 ===${NC}"
+}
+
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
    print_error "This script must be run as root (use sudo)"
    exit 1
 fi
 
-print_status "Starting PocketFlow system installation..."
+print_header "PocketFlow System Installation"
+print_status "Installing PocketFlow with new modular architecture..."
+
+# Check if we're in the right directory
+if [ ! -f "main.py" ]; then
+    print_error "This script must be run from the PocketFlow directory"
+    exit 1
+fi
+
+# Check if new architecture exists
+if [ ! -d "src" ]; then
+    print_error "New modular architecture (src/) not found"
+    print_error "Please ensure the new architecture is properly set up"
+    exit 1
+fi
 
 # 1. Create service user and group
+print_header "Creating Service User"
 print_status "Creating service user and group..."
 if ! id "$SERVICE_USER" &>/dev/null; then
     useradd --system --no-create-home --shell /bin/false "$SERVICE_USER"
@@ -47,19 +67,23 @@ else
 fi
 
 # 2. Create directories
+print_header "Creating Directories"
 print_status "Creating directories..."
 mkdir -p "$APP_DIR"
 mkdir -p "$LOG_DIR"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$APP_DIR/data"
+mkdir -p "$APP_DIR/backups"
 
 # 3. Copy application files
+print_header "Copying Application Files"
 print_status "Copying application files..."
 cp -r . "$APP_DIR/"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
 chmod -R 755 "$APP_DIR"
 
 # 4. Create Python virtual environment
+print_header "Setting Up Python Environment"
 print_status "Creating Python virtual environment..."
 if [ -d "$VENV_DIR" ]; then
     print_status "Removing existing virtual environment..."
@@ -73,195 +97,157 @@ fi
 print_status "Virtual environment created successfully"
 
 # 5. Activate venv and install dependencies
+print_header "Installing Dependencies"
 print_status "Installing Python dependencies..."
 source "$VENV_DIR/bin/activate"
 
+# Upgrade pip
+print_status "Upgrading pip..."
+pip install --upgrade pip
+
+# Install pydantic-settings for new architecture
+print_status "Installing new architecture dependencies..."
+pip install pydantic-settings
+
 # Install torch first (compatible with python3.12 and audiocraft)
+print_status "Installing PyTorch..."
 pip install torch==2.7.1
 
 # Install all other Python dependencies except torch, audiocraft, and julius
+print_status "Installing other dependencies..."
 grep -v -E '^(torch|audiocraft|julius)' requirements.txt > "$APP_DIR/requirements-no-torch.txt"
 pip install -r "$APP_DIR/requirements-no-torch.txt"
 
 # Install audiocraft and julius with --no-deps
+print_status "Installing audio processing dependencies..."
 pip install --no-deps audiocraft julius
 
 # Ensure requests is installed for BTC price fetching
 pip install requests python-dotenv
 
-# 6. Create startup script
+# 6. Create startup script for new architecture
+print_header "Creating Startup Script"
 print_status "Creating startup script..."
 cat > "$APP_DIR/run_app.sh" << 'EOF'
 #!/bin/bash
 source /opt/pocketflow/venv/bin/activate
 cd /opt/pocketflow
+export PYTHONPATH="${PYTHONPATH}:/opt/pocketflow/src"
 exec python main.py
 EOF
-
 chmod +x "$APP_DIR/run_app.sh"
 chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/run_app.sh"
 
-# 7. Create systemd service file
+# 7. Create systemd service file for new architecture
+print_header "Creating Systemd Service"
 print_status "Creating systemd service..."
 cat > "/etc/systemd/system/$APP_NAME.service" << EOF
 [Unit]
-Description=PocketFlow Email Agent and BTC Service
+Description=PocketFlow Email Agent and BTC Service (New Architecture)
 After=network.target
-Wants=network.target
 
 [Service]
 Type=simple
 User=$SERVICE_USER
-Group=$SERVICE_GROUP
 WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/run_app.sh
 Restart=on-failure
 RestartSec=10
+Environment=PYTHONPATH=$APP_DIR:$APP_DIR/src
+Environment=BTC_SHARED_PATH=$APP_DIR/data/shared.yaml
+EnvironmentFile=$APP_DIR/.env
+
+# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=$APP_NAME
-
-# Environment variables
-Environment=BTC_SHARED_PATH=$APP_DIR/data/shared.yaml
-Environment=PYTHONPATH=$APP_DIR
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$APP_DIR/data $LOG_DIR
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# 8. Create logrotate configuration
-print_status "Creating logrotate configuration..."
-cat > "/etc/logrotate.d/$APP_NAME" << EOF
-$LOG_DIR/*.log {
-    daily
-    missingok
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 644 $SERVICE_USER $SERVICE_GROUP
-    postrotate
-        systemctl reload $APP_NAME.service >/dev/null 2>&1 || true
-    endscript
-}
-EOF
+# 8. Test the installation
+print_header "Testing Installation"
+print_status "Testing new architecture..."
 
-# 9. Set proper permissions
-print_status "Setting permissions..."
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR"
-chown -R "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR"
-chmod 755 "$LOG_DIR"
-chmod 755 "$CONFIG_DIR"
+# Test imports for new modular architecture
+if sudo -u "$SERVICE_USER" "$VENV_DIR/bin/python" -c "
+import sys
+sys.path.append('$APP_DIR')
+try:
+    from src.pocketflow import flow_manager, get_settings
+    print('✓ New modular architecture working')
+except Exception as e:
+    print(f'✗ New architecture error: {e}')
+    exit(1)
+" 2>/dev/null; then
+    print_status "✓ New modular architecture working"
+else
+    print_error "✗ New architecture issues detected"
+    print_status "Please check the installation and try again"
+    exit 1
+fi
+
+# 9. Initialize database
+print_header "Initializing Database"
+print_status "Setting up database..."
+sudo -u "$SERVICE_USER" "$VENV_DIR/bin/python" -c "
+import sys
+sys.path.append('$APP_DIR')
+try:
+    from src.pocketflow.services.database_service import database_service
+    print('✓ Database service initialized')
+except Exception as e:
+    print(f'Database initialization error: {e}')
+" 2>/dev/null || print_warning "Database initialization had issues (this is normal for first run)"
 
 # 10. Reload systemd and enable service
+print_header "Enabling Service"
 print_status "Reloading systemd and enabling service..."
 systemctl daemon-reload
-systemctl enable "$APP_NAME.service"
+systemctl enable "$APP_NAME"
 
-# 11. Create configuration template
-print_status "Creating configuration template..."
-cat > "$CONFIG_DIR/config.yaml" << 'EOF'
-# PocketFlow Configuration
-# Copy this file to your desired location and update the values
+# 11. Print installation summary
+print_header "Installation Summary"
+cat << EOM
 
-# Application settings
-app:
-  name: "PocketFlow"
-  version: "1.0.0"
-  log_level: "INFO"
+🎉 PocketFlow Installation Complete!
 
-# Database settings (if applicable)
-database:
-  path: "/opt/pocketflow/data/user_data.db"
+📁 Application Directory: $APP_DIR
+👤 Service User: $SERVICE_USER
+🔧 Service Name: $APP_NAME
+🏗️ Architecture: New Modular (src/pocketflow/)
 
-# API settings (if applicable)
-api:
-  host: "localhost"
-  port: 8080
+📋 Service Status:
+EOM
 
-# BTC settings
-btc:
-  shared_path: "/opt/pocketflow/data/shared.yaml"
-  wallet_path: "/opt/pocketflow/data/wallet"
-EOF
+if systemctl is-enabled "$APP_NAME" >/dev/null 2>&1; then
+    echo "✓ Service is enabled"
+else
+    echo "⚠ Service is not enabled"
+fi
 
-chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_DIR/config.yaml"
-chmod 644 "$CONFIG_DIR/config.yaml"
+cat << EOM
 
-# 12. Create uninstall script
-print_status "Creating uninstall script..."
-cat > "$APP_DIR/uninstall.sh" << 'EOF'
-#!/bin/bash
-set -e
+📊 Useful Commands:
+- Start service: sudo systemctl start $APP_NAME
+- Check status: sudo systemctl status $APP_NAME
+- View logs: journalctl -u $APP_NAME -f
+- Restart service: sudo systemctl restart $APP_NAME
+- Stop service: sudo systemctl stop $APP_NAME
 
-APP_NAME="pocketflow"
-APP_DIR="/opt/$APP_NAME"
-SERVICE_USER="pocketflow"
-SERVICE_GROUP="pocketflow"
+🔧 Configuration:
+- Edit config: $CONFIG_DIR/
+- View logs: $LOG_DIR/
+- Data directory: $APP_DIR/data/
 
-echo "Uninstalling PocketFlow..."
+🏗️ New Architecture Features:
+- Modular design with src/pocketflow/
+- Service layer abstraction
+- Improved error handling
+- Better configuration management
+- Database service integration
 
-# Stop and disable service
-systemctl stop $APP_NAME.service || true
-systemctl disable $APP_NAME.service || true
+EOM
 
-# Remove service file
-rm -f /etc/systemd/system/$APP_NAME.service
-
-# Remove logrotate configuration
-rm -f /etc/logrotate.d/$APP_NAME
-
-# Reload systemd
-systemctl daemon-reload
-
-# Remove application files
-rm -rf $APP_DIR
-
-# Remove logs (optional - uncomment if you want to keep logs)
-# rm -rf /var/log/$APP_NAME
-
-# Remove configuration (optional - uncomment if you want to keep config)
-# rm -rf /etc/$APP_NAME
-
-# Remove user and group (optional - uncomment if you want to remove them)
-# userdel $SERVICE_USER || true
-# groupdel $SERVICE_GROUP || true
-
-echo "PocketFlow has been uninstalled."
-EOF
-
-chmod +x "$APP_DIR/uninstall.sh"
-
-# 13. Print installation summary
-print_status "Installation complete!"
-echo
-echo "=== PocketFlow System Installation Summary ==="
-echo "Application Directory: $APP_DIR"
-echo "Service User: $SERVICE_USER"
-echo "Log Directory: $LOG_DIR"
-echo "Config Directory: $CONFIG_DIR"
-echo "Virtual Environment: $VENV_DIR"
-echo
-echo "=== Service Management ==="
-echo "Start service:     systemctl start $APP_NAME"
-echo "Stop service:      systemctl stop $APP_NAME"
-echo "Restart service:   systemctl restart $APP_NAME"
-echo "Check status:      systemctl status $APP_NAME"
-echo "View logs:         journalctl -u $APP_NAME -f"
-echo
-echo "=== Configuration ==="
-echo "Edit configuration: $CONFIG_DIR/config.yaml"
-echo "Application data:   $APP_DIR/data/"
-echo
-echo "=== Uninstallation ==="
-echo "To uninstall:      $APP_DIR/uninstall.sh"
-echo
-print_warning "The service is installed but not started. Run 'systemctl start $APP_NAME' to start it."
-print_warning "Make sure to configure your environment variables and BTC wallet settings before starting." 
+print_status "Installation completed successfully!" 

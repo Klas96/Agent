@@ -12,7 +12,7 @@ from ..nodes import (
     ConversationContextNode,
     AgentNode, PopAgentActionNode,
     ContentCreatorNode, ContentParamNode, GenerateContentNode,
-    SendEmailNode
+    SendEmailNode, FinishNode
 )
 from ..utils.logging import get_logger
 
@@ -34,6 +34,7 @@ class ContentGenerationFlow:
                 .add_step("content_params", ContentParamNode("content_params"))
                 .add_step("generate_content", GenerateContentNode("generate_content"))
                 .add_step("send_email", SendEmailNode("send_email"))
+                .add_step("finish", FinishNode("finish"))
                 .set_start("conversation_context")
                 .add_end_step("send_email")
                 .add_end_step("finish")

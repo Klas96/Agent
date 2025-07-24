@@ -8,7 +8,8 @@ import os
 import yaml
 from typing import Dict, Any, Optional
 from pathlib import Path
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 from .models import ConfigModel
 
 
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # Allow extra fields from environment
 
 
 class ConfigManager:

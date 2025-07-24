@@ -12,7 +12,7 @@ from ..nodes import (
     ConversationContextNode,
     AgentNode, PopAgentActionNode,
     InvestigateTopicNode,
-    SendEmailNode
+    SendEmailNode, FinishNode
 )
 from ..utils.logging import get_logger
 
@@ -32,6 +32,7 @@ class InvestigationFlow:
                 .add_step("pop_action", PopAgentActionNode("pop_action"))
                 .add_step("investigate", InvestigateTopicNode("investigate"))
                 .add_step("send_email", SendEmailNode("send_email"))
+                .add_step("finish", FinishNode("finish"))
                 .set_start("conversation_context")
                 .add_end_step("send_email")
                 .add_end_step("finish")

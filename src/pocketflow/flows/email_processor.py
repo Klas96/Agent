@@ -12,7 +12,7 @@ from ..nodes import (
     FetchEmailNode, SendEmailNode, ConversationContextNode,
     AgentNode, PopAgentActionNode,
     ContentCreatorNode, ContentParamNode, GenerateContentNode,
-    InvestigateTopicNode
+    InvestigateTopicNode, FinishNode
 )
 from ..utils.logging import get_logger
 
@@ -36,6 +36,7 @@ class EmailProcessorFlow:
                 .add_step("generate_content", GenerateContentNode("generate_content"))
                 .add_step("investigate", InvestigateTopicNode("investigate"))
                 .add_step("send_email", SendEmailNode("send_email"))
+                .add_step("finish", FinishNode("finish"))
                 .set_start("fetch_email")
                 .add_end_step("send_email")
                 .add_end_step("finish")

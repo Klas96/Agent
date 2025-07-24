@@ -67,6 +67,20 @@ class BitcoinError(PocketFlowError):
         super().__init__(message, ErrorSeverity.HIGH, {"address": address})
 
 
+class DatabaseError(PocketFlowError):
+    """Raised when there's a database-related error."""
+    
+    def __init__(self, message: str, table: Optional[str] = None, operation: Optional[str] = None):
+        super().__init__(message, ErrorSeverity.HIGH, {"table": table, "operation": operation})
+
+
+class WebSearchError(PocketFlowError):
+    """Raised when there's a web search-related error."""
+    
+    def __init__(self, message: str, query: Optional[str] = None):
+        super().__init__(message, ErrorSeverity.MEDIUM, {"query": query})
+
+
 class FlowError(PocketFlowError):
     """Raised when there's a flow execution error."""
     

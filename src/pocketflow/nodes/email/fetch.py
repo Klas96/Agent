@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any
 
 from ...core.node import SimpleNode
 from ...core.types import SharedState, EmailData
-from ...services import email_service
+from ...services import email_service, database_service
 from ...utils.logging import get_logger
 from ...utils.errors import EmailError
 
@@ -70,9 +70,12 @@ class FetchEmailNode(SimpleNode):
             sender_email = extract_email(email.from_).strip().lower() if email.from_ else None
             sender_domain = sender_email.split("@")[-1] if sender_email and "@" in sender_email else None
             
-            # TODO: Implement greenlist checking
-            # For now, accept all emails
-            is_greenlisted = True
+            # Check greenlist for sender
+            is_greenlisted = False
+            if sender_email:
+                is_greenlisted = database_service.is_greenlisted_email(sender_email)
+            if not is_greenlisted and sender_domain:
+                is_greenlisted = database_service.is_greenlisted_domain(sender_domain)
             
             if not is_greenlisted:
                 self.logger.info(f"Sender {email.from_} not in greenlist. Skipping email.")

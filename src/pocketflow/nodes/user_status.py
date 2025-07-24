@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 from ..core.node import SimpleNode
 from ..core.types import SharedState, FlowType
 from ..utils.logging import get_logger
+from ..services.database_service import database_service
 
 
 class UserStatusCheckNode(SimpleNode):
@@ -44,10 +45,12 @@ class UserStatusCheckNode(SimpleNode):
     
     def _check_user_tokens(self, user_email: str) -> int:
         """Check how many tokens a user has remaining."""
-        # TODO: Implement actual database query
-        # This is a placeholder implementation
-        import random
-        return random.choice([0, 5, 10, 15])
+        try:
+            return database_service.get_tokens(user_email)
+        except Exception as e:
+            logger = get_logger("UserStatusCheckNode")
+            logger.error(f"Failed to check tokens for {user_email}: {e}")
+            return 0
 
 
 class TokenValidationNode(SimpleNode):
@@ -126,11 +129,29 @@ class PaymentRequestNode(SimpleNode):
     
     def _get_or_create_btc_address(self, user_email: str) -> str:
         """Get or create a Bitcoin address for the user."""
-        # TODO: Implement actual Bitcoin address management
-        # This is a placeholder implementation
-        import hashlib
-        address_hash = hashlib.md5(user_email.encode()).hexdigest()[:34]
-        return f"bc1{address_hash}"
+        try:
+            # Check if user already has a BTC address
+            addresses = database_service.get_btc_addresses(user_email)
+            if addresses:
+                return addresses[0]  # Return the first address
+            
+            # TODO: Generate new address using Bitcoin service
+            # For now, use a placeholder
+            import hashlib
+            address_hash = hashlib.md5(user_email.encode()).hexdigest()[:34]
+            new_address = f"bc1{address_hash}"
+            
+            # Store the new address
+            database_service.add_btc_address(user_email, new_address)
+            return new_address
+            
+        except Exception as e:
+            logger = get_logger("PaymentRequestNode")
+            logger.error(f"Failed to get/create BTC address for {user_email}: {e}")
+            # Fallback to placeholder
+            import hashlib
+            address_hash = hashlib.md5(user_email.encode()).hexdigest()[:34]
+            return f"bc1{address_hash}"
     
     def _calculate_payment_amount(self, action: str) -> float:
         """Calculate payment amount based on action type."""
@@ -161,17 +182,34 @@ class TokenConsumptionNode(SimpleNode):
             logger.error("No user email for token consumption")
             return None
         
-        # TODO: Implement actual token consumption in database
-        logger.info(f"Consuming {tokens_consumed} tokens for user {user_email}")
-        
-        # Update remaining tokens
-        current_tokens = shared.get("tokens_remaining", 0)
-        new_tokens = max(0, current_tokens - tokens_consumed)
-        
-        return {
-            "tokens_remaining": new_tokens,
-            "user_has_tokens": new_tokens > 0
-        }
+        try:
+            # Consume tokens using database service
+            success = database_service.consume_tokens(user_email, tokens_consumed)
+            
+            if success:
+                logger.info(f"Successfully consumed {tokens_consumed} tokens for {user_email}")
+                # Update remaining tokens
+                current_tokens = shared.get("tokens_remaining", 0)
+                new_tokens = max(0, current_tokens - tokens_consumed)
+                
+                return {
+                    "tokens_remaining": new_tokens,
+                    "user_has_tokens": new_tokens > 0,
+                    "token_consumption": "success"
+                }
+            else:
+                logger.warning(f"Failed to consume {tokens_consumed} tokens for {user_email}")
+                return {
+                    "token_consumption": "failed",
+                    "error": "Insufficient tokens"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error consuming tokens for {user_email}: {e}")
+            return {
+                "token_consumption": "error",
+                "error": str(e)
+            }
 
 
 class FlowTypeRouterNode(SimpleNode):

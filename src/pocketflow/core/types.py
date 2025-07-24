@@ -111,6 +111,34 @@ class PaymentRequest(BaseModel):
     description: str = Field(description="Payment description")
 
 
+class User(BaseModel):
+    """User data structure."""
+    email: str = Field(description="User email address")
+    tokens: int = Field(description="Number of tokens available")
+    created_at: str = Field(description="When user was created")
+    updated_at: str = Field(description="When user was last updated")
+
+
+class BTCAddress(BaseModel):
+    """Bitcoin address data structure."""
+    id: int = Field(description="Address ID")
+    email: str = Field(description="User email")
+    address: str = Field(description="Bitcoin address")
+    created_at: str = Field(description="When address was created")
+
+
+class PaymentTransaction(BaseModel):
+    """Bitcoin payment transaction."""
+    id: int = Field(description="Transaction ID")
+    email: str = Field(description="User email")
+    btc_amount: Optional[float] = Field(default=None, description="Amount in BTC")
+    usd_amount: Optional[float] = Field(default=None, description="Amount in USD")
+    tokens_credited: int = Field(description="Number of tokens credited")
+    tx_id: str = Field(description="Bitcoin transaction ID")
+    timestamp: str = Field(description="Transaction timestamp")
+    created_at: str = Field(description="When record was created")
+
+
 class FlowConfig(BaseModel):
     """Configuration for a flow."""
     name: str = Field(description="Flow name")

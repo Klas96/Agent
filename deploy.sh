@@ -2,7 +2,7 @@
 set -e
 
 # PocketFlow Deployment Script
-# Deploys changes from development (/home/klas/PocketFlow) to production (/opt/pocketflow)
+# Deploys the new modular architecture from development to production
 
 # Colors for output
 RED='\033[0;31m'
@@ -33,12 +33,19 @@ PROD_DIR="/opt/pocketflow"
 SERVICE_NAME="pocketflow"
 BACKUP_DIR="$PROD_DIR/backups"
 
-print_header "PocketFlow Deployment Script"
-print_status "Deploying from development to production..."
+print_header "PocketFlow Deployment"
+print_status "Deploying new modular architecture to production..."
 
 # Check if we're in the development directory
 if [ ! -f "$DEV_DIR/main.py" ]; then
     print_error "Development directory not found: $DEV_DIR"
+    exit 1
+fi
+
+# Check if src directory exists (new architecture)
+if [ ! -d "$DEV_DIR/src" ]; then
+    print_error "New architecture src directory not found: $DEV_DIR/src"
+    print_error "Please ensure the new modular architecture is properly set up"
     exit 1
 fi
 
@@ -86,41 +93,116 @@ fi
 
 # Deploy files
 print_header "Deploying Files"
-print_status "Copying application files..."
+print_status "Copying new modular architecture..."
 
-# Copy main application files
+# Copy main application file
 sudo cp "$DEV_DIR/main.py" "$PROD_DIR/"
-sudo cp "$DEV_DIR/nodes.py" "$PROD_DIR/"
-sudo cp "$DEV_DIR/flow.py" "$PROD_DIR/"
 
-# Copy utils directory
-sudo cp -r "$DEV_DIR/utils/"* "$PROD_DIR/utils/"
+# Copy new modular architecture
+sudo cp -r "$DEV_DIR/src/" "$PROD_DIR/"
 
 # Copy configuration files
 sudo cp "$DEV_DIR/.env" "$PROD_DIR/" 2>/dev/null || print_warning ".env not found in dev"
+
+# Copy requirements and other necessary files
+sudo cp "$DEV_DIR/requirements.txt" "$PROD_DIR/" 2>/dev/null || print_warning "requirements.txt not found"
+sudo cp "$DEV_DIR/requirements-no-torch.txt" "$PROD_DIR/" 2>/dev/null || print_warning "requirements-no-torch.txt not found"
+
+# Copy scripts directory
+sudo cp -r "$DEV_DIR/scripts/" "$PROD_DIR/" 2>/dev/null || print_warning "scripts directory not found"
+
+# Copy config directory
+sudo cp -r "$DEV_DIR/config/" "$PROD_DIR/" 2>/dev/null || print_warning "config directory not found"
+
+# Copy utils directory (legacy support)
+sudo cp -r "$DEV_DIR/utils/"* "$PROD_DIR/utils/" 2>/dev/null || print_warning "utils directory not found"
 
 # Set proper permissions
 print_status "Setting permissions..."
 sudo chown -R pocketflow:pocketflow "$PROD_DIR"
 
+# Update Python dependencies
+print_header "Updating Dependencies"
+print_status "Activating virtual environment..."
+source "$PROD_DIR/venv/bin/activate"
+
+print_status "Upgrading pip..."
+pip install --upgrade pip
+
+print_status "Installing new architecture dependencies..."
+# Install pydantic-settings for new architecture
+pip install pydantic-settings
+
+# Install other dependencies
+if [ -f "$PROD_DIR/requirements.txt" ]; then
+    pip install -r "$PROD_DIR/requirements.txt"
+else
+    print_warning "requirements.txt not found, installing basic dependencies..."
+    pip install numpy openai google-generativeai anthropic requests python-dotenv pydantic pydantic-settings
+fi
+
+# Update startup script for new architecture
+print_header "Updating Startup Script"
+cat > "$PROD_DIR/run_app.sh" << 'EOF'
+#!/bin/bash
+source /opt/pocketflow/venv/bin/activate
+cd /opt/pocketflow
+export PYTHONPATH="${PYTHONPATH}:/opt/pocketflow/src"
+exec python main.py
+EOF
+chmod +x "$PROD_DIR/run_app.sh"
+
+# Update systemd service for new architecture
+print_header "Updating Systemd Service"
+SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
+
+sudo bash -c "cat > $SERVICE_FILE" << EOF
+[Unit]
+Description=PocketFlow Email Agent and BTC Service (New Architecture)
+After=network.target
+
+[Service]
+Type=simple
+User=pocketflow
+WorkingDirectory=$PROD_DIR
+ExecStart=$PROD_DIR/run_app.sh
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONPATH=$PROD_DIR:$PROD_DIR/src
+Environment=BTC_SHARED_PATH=$PROD_DIR/data/shared.yaml
+EnvironmentFile=$PROD_DIR/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=$SERVICE_NAME
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd
+print_status "Reloading systemd daemon..."
+sudo systemctl daemon-reload
+
 # Test the deployment
 print_header "Testing Deployment"
 print_status "Testing basic functionality..."
 
-# Test imports
+# Test imports for new modular architecture
 if sudo -u pocketflow /opt/pocketflow/venv/bin/python -c "
 import sys
 sys.path.append('/opt/pocketflow')
 try:
-    from utils.llm_utils import call_llm
-    print('✓ LLM utils working')
+    from src.pocketflow import flow_manager, get_settings
+    print('✓ New modular architecture working')
 except Exception as e:
-    print(f'✗ LLM utils error: {e}')
+    print(f'✗ New architecture error: {e}')
     exit(1)
 " 2>/dev/null; then
-    print_status "✓ Basic imports working"
+    print_status "✓ New modular architecture working"
 else
-    print_error "✗ Import issues detected"
+    print_error "✗ New architecture issues detected"
     print_status "Restoring from backup..."
     sudo tar -xzf "$BACKUP_DIR/$BACKUP_NAME.tar.gz" -C "$PROD_DIR"
     exit 1
@@ -162,6 +244,7 @@ cat << EOM
 🏢 Production: $PROD_DIR
 🔧 Service: $SERVICE_NAME
 📦 Backup: $BACKUP_NAME.tar.gz
+🏗️ Architecture: New Modular (src/pocketflow/)
 
 📋 Service Status:
 EOM
@@ -184,6 +267,13 @@ cat << EOM
 - Stop service: sudo systemctl stop $SERVICE_NAME
 - Restore backup: sudo tar -xzf $BACKUP_DIR/$BACKUP_NAME.tar.gz -C $PROD_DIR
 - Restart service: sudo systemctl start $SERVICE_NAME
+
+🏗️ New Architecture Features:
+- Modular design with src/pocketflow/
+- Service layer abstraction
+- Improved error handling
+- Better configuration management
+- Database service integration
 
 EOM
 
