@@ -31,6 +31,13 @@ class SharedState(BaseModel):
     user_has_tokens: Optional[bool] = Field(default=None, description="Whether user has tokens")
     flow_type: Optional[str] = Field(default=None, description="Type of flow being executed")
     action_queue: Optional[List[Dict[str, Any]]] = Field(default=None, description="Queue of actions to be processed")
+    agent_action: Optional[Dict[str, Any]] = Field(default=None, description="Current agent action being processed")
+    sender_have_gotten_response: Optional[bool] = Field(default=None, description="Whether sender has received a response")
+    send_body_extra: Optional[str] = Field(default=None, description="Extra content to add to email body")
+    attachment: Optional[str] = Field(default=None, description="Attachment file path")
+    content_request: Optional[Any] = Field(default=None, description="Content generation request")
+    chosen_subtype: Optional[str] = Field(default=None, description="Chosen content subtype")
+    chosen_duration: Optional[int] = Field(default=None, description="Chosen content duration")
     
     class Config:
         arbitrary_types_allowed = True
@@ -78,7 +85,7 @@ class EmailData(BaseModel):
     received_at: datetime = Field(description="When email was received")
     
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True
 
 
 class ContentGenerationRequest(BaseModel):

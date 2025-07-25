@@ -18,7 +18,7 @@ class UserStatusCheckNode(SimpleNode):
     def process(self, shared: SharedState) -> Optional[Dict[str, Any]]:
         """Check user token status and set flow type."""
         logger = get_logger("UserStatusCheckNode")
-        user_email = shared.get("user")
+        user_email = getattr(shared, 'user', None)
         
         if not user_email:
             logger.warning("No user email found in shared state")

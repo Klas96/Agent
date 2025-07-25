@@ -10,7 +10,7 @@ from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
 from ...utils.errors import EmailError
 from ...services import email_service
-from utils.email_utils import extract_email
+from ...utils.email_utils import extract_email
 
 
 class SendEmailNode(SimpleNode):
@@ -34,14 +34,14 @@ class SendEmailNode(SimpleNode):
             self.logger.info("Preparing to send email...")
             
             # Get agent action and parameters
-            agent_action = shared.get("agent_action", {})
+            agent_action = shared.agent_action or {}
             params = agent_action.get("parameters", {})
-            email = shared.get("email", {})
+            email = shared.email or {}
             
             # Determine recipient
             to = params.get("to")
             if not to:
-                to = shared.get("user") or extract_email(email.get("from", ""))
+                to = shared.user or extract_email(email.get("from", ""))
             
             # Determine subject
             subject = params.get("subject")
@@ -56,7 +56,7 @@ class SendEmailNode(SimpleNode):
                 body = "Sorry, there was an error generating your reply."
             
             # Add extra body content if available
-            send_body_extra = shared.get("send_body_extra", "")
+            send_body_extra = getattr(shared, 'send_body_extra', None) or ""
             if send_body_extra:
                 body += f"\n\n{send_body_extra}"
             
@@ -66,7 +66,7 @@ class SendEmailNode(SimpleNode):
                 subject=subject,
                 body=body,
                 cc=params.get("cc"),
-                attachment=shared.get("attachment")
+                attachment=getattr(shared, 'attachment', None)
             )
             
             self.logger.info(f"Sending email to: {to}, subject: {subject}")
@@ -76,7 +76,7 @@ class SendEmailNode(SimpleNode):
             
             if success:
                 self.logger.info("Email sent successfully")
-                shared["sender_have_gotten_response"] = True
+                shared.sender_have_gotten_response = True
                 return {"route": "default"}
             else:
                 raise EmailError("Email service returned failure")

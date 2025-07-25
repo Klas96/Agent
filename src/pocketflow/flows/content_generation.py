@@ -11,7 +11,7 @@ from ..core.types import FlowType, SharedState
 from ..nodes import (
     ConversationContextNode,
     AgentNode, PopAgentActionNode,
-    ContentCreatorNode, ContentParamNode, GenerateContentNode,
+    ContentCreatorNode, ContentParamNode, GenerateContentNode, DocumentGeneratorNode,
     SendEmailNode, FinishNode
 )
 from ..utils.logging import get_logger
@@ -33,6 +33,7 @@ class ContentGenerationFlow:
                 .add_step("content_creator", ContentCreatorNode("content_creator"))
                 .add_step("content_params", ContentParamNode("content_params"))
                 .add_step("generate_content", GenerateContentNode("generate_content"))
+                .add_step("document_generator", DocumentGeneratorNode("document_generator"))
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
                 .set_start("conversation_context")
@@ -52,7 +53,9 @@ class ContentGenerationFlow:
                 .add_routing("content_creator", "default", "content_params")
                 .add_routing("content_params", "default", "generate_content")
                 .add_routing("generate_content", "generation_failed", "finish")
-                .add_routing("generate_content", "default", "pop_action")
+                .add_routing("generate_content", "default", "document_generator")
+                .add_routing("document_generator", "generation_failed", "finish")
+                .add_routing("document_generator", "default", "pop_action")
                 # Email sending routing
                 .add_routing("send_email", "send_failed", "finish")
                 .add_routing("send_email", "default", "pop_action")

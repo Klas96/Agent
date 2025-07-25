@@ -10,7 +10,7 @@ from ...core.types import SharedState
 from ...utils.logging import get_logger
 from ...utils.errors import EmailError
 from ...services import email_service
-from utils.email_utils import extract_email
+from ...utils.email_utils import extract_email
 
 
 class FetchEmailNode(SimpleNode):
@@ -30,17 +30,17 @@ class FetchEmailNode(SimpleNode):
                 shared.email = {
                     'id': email_data.id,
                     'subject': email_data.subject,
-                    'from': email_data.sender,
+                    'from': email_data.from_,
                     'body': email_data.body,
-                    'date': email_data.date,
-                    'message_id': email_data.message_id,
+                    'date': email_data.received_at,
+                    'message_id': email_data.id,
                     'thread_id': email_data.thread_id
                 }
                 logger.info(f"Fetched email: {email_data.subject}")
                 return {"route": "default"}
             else:
                 logger.info("No unread emails found")
-                return None
+                return {"route": "finish"}
                 
         except Exception as e:
             logger.error(f"Error fetching emails: {e}")

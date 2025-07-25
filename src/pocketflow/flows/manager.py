@@ -43,8 +43,8 @@ class FlowManager:
         """
         try:
             # Get user email and flow type
-            user_email = shared.get("user")
-            flow_type = shared.get("flow_type", FlowType.TOKENED_USER)
+            user_email = getattr(shared, 'user', None)
+            flow_type = getattr(shared, 'flow_type', FlowType.TOKENED_USER)
             
             self.logger.info(f"Selecting flow for user: {user_email}, flow_type: {flow_type}")
             
@@ -55,8 +55,8 @@ class FlowManager:
                 return "payment_processing"
             elif flow_type == FlowType.TOKENED_USER:
                 # Check if this is a specialized request
-                email = shared.get("email", {})
-                body = email.get("body", "").lower()
+                email = getattr(shared, 'email', {})
+                body = email.get("body", "").lower() if email else ""
                 
                 # Check for content generation keywords
                 content_keywords = ["generate", "create", "make", "song", "music", "image", "document"]

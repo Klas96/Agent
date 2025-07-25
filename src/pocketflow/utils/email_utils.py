@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from src.pocketflow.utils.logging import get_logger
+from .logging import get_logger
 
 logger = get_logger("email_utils")
 

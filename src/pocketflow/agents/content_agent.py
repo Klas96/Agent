@@ -150,6 +150,36 @@ class ContentAgent(BaseAgent):
             "style": "professional" if content_type == "document" else "creative"
         }
         
+        # If we have research findings, enhance the prompt for document generation
+        if research_findings and content_type == "document":
+            research_topic = research_findings.get("topic", "")
+            research_summary = research_findings.get("summary", "")
+            research_sources = research_findings.get("sources", [])
+            
+            # Create an enhanced prompt that incorporates research findings
+            enhanced_prompt = f"""
+Based on the following research findings, create a comprehensive {content_type}:
+
+**Research Topic:** {research_topic}
+**Research Summary:** {research_summary}
+
+**User Request:** {user_request}
+
+**Additional Context:** The research was conducted using {len(research_sources)} sources to ensure comprehensive coverage of the topic.
+
+Please create a professional document that:
+1. Incorporates the research findings
+2. Addresses the user's specific request
+3. Provides a well-structured and informative report
+4. Uses the research data to support conclusions and recommendations
+
+Make sure the document is comprehensive, well-organized, and professionally formatted.
+"""
+            
+            params["prompt"] = enhanced_prompt
+            params["research_based"] = True
+            params["research_findings"] = research_findings
+        
         # If we have research findings, incorporate them
         if research_findings:
             research_summary = research_findings.get("summary", "")

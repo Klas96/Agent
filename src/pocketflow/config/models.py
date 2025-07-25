@@ -23,7 +23,10 @@ class LLMConfig(BaseModel):
     """LLM service configuration."""
     provider: str = Field(default="openai", description="LLM provider")
     model: str = Field(default="gpt-4", description="Model name")
-    api_key: str = Field(description="API key")
+    api_key: Optional[str] = Field(default=None, description="API key")
+    ollama_host: str = Field(default="localhost", description="Ollama host")
+    ollama_port: int = Field(default=11434, description="Ollama port")
+    ollama_model: str = Field(default="llama3:latest", description="Ollama model")
     max_tokens: int = Field(default=4000, description="Maximum tokens")
     temperature: float = Field(default=0.7, description="Temperature")
     timeout: int = Field(default=60, description="Request timeout in seconds")

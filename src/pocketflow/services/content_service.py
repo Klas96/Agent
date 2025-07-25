@@ -133,20 +133,21 @@ torchaudio.save("{output_path}", wav, 32000)
             return None
     
     def _generate_document(self, request: ContentGenerationRequest) -> Optional[str]:
-        """Generate document content."""
+        """Generate document content using LaTeX templates."""
         try:
-            output_path = self._get_output_path("document", "pdf")
+            # Use the new document service for LaTeX-based PDF generation
+            from .document_service import DocumentService
+            document_service = DocumentService()
             
-            # Create a simple document based on the prompt
-            document_content = self._create_document_content(request.prompt)
+            pdf_path = document_service.generate_document(request)
             
-            # Save as PDF (simplified - in real implementation, use proper PDF library)
-            with open(output_path, 'w') as f:
-                f.write(document_content)
-            
-            self.logger.info(f"Document generated: {output_path}")
-            return output_path
-            
+            if pdf_path:
+                self.logger.info(f"Document generated: {pdf_path}")
+                return pdf_path
+            else:
+                self.logger.error("Document generation failed")
+                return None
+                
         except Exception as e:
             self.logger.error(f"Document generation error: {e}")
             return None

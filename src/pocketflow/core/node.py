@@ -159,8 +159,11 @@ class SimpleNode(Node):
         if exec_result is not None and isinstance(exec_result, dict):
             # Update shared state attributes based on exec_result
             for key, value in exec_result.items():
-                if hasattr(shared, key):
+                if key != "route" and hasattr(shared, key):
                     setattr(shared, key, value)
+            
+            # Return the route if specified, otherwise default
+            return exec_result.get("route", "default")
         return "default"
     
     @abstractmethod

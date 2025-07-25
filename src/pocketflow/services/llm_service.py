@@ -11,7 +11,7 @@ import json
 import time
 
 from ..core.types import AgentAction
-from ..config.settings import get_settings
+from ..config.settings import get_settings, get_llm_config
 from ..utils.errors import LLMError, RetryableError
 from ..utils.logging import get_logger
 
@@ -21,19 +21,22 @@ class LLMService:
     
     def __init__(self):
         self.settings = get_settings()
+        self.llm_config = get_llm_config()
         self.logger = get_logger("LLMService")
         self._setup_providers()
     
     def _setup_providers(self):
         """Setup LLM providers based on configuration."""
-        if self.settings.LLM_PROVIDER == "openai":
-            if not self.settings.OPENAI_API_KEY:
-                raise LLMError("OpenAI API key not configured")
+        # Default to Ollama, only setup other providers if API keys are available
+        if self.settings.OPENAI_API_KEY:
             openai.api_key = self.settings.OPENAI_API_KEY
-        elif self.settings.LLM_PROVIDER == "google":
-            if not self.settings.GOOGLE_API_KEY:
-                raise LLMError("Google API key not configured")
+            self.logger.info("OpenAI API key configured")
+        if self.settings.GOOGLE_API_KEY:
             genai.configure(api_key=self.settings.GOOGLE_API_KEY)
+            self.logger.info("Google API key configured")
+        
+        # Always log Ollama configuration
+        self.logger.info(f"Using Ollama at {self.settings.OLLAMA_HOST}:{self.settings.OLLAMA_PORT}")
     
     def call_llm(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """
@@ -52,12 +55,28 @@ class LLMService:
         try:
             self.logger.info(f"Calling LLM with {len(messages)} messages")
             
-            if self.settings.LLM_PROVIDER == "openai":
-                return self._call_openai(messages, **kwargs)
-            elif self.settings.LLM_PROVIDER == "google":
-                return self._call_google(messages, **kwargs)
-            else:
-                raise LLMError(f"Unsupported LLM provider: {self.settings.LLM_PROVIDER}")
+            # Default to Ollama, fallback to other providers if available
+            try:
+                return self._call_ollama(messages, **kwargs)
+            except Exception as ollama_error:
+                self.logger.warning(f"Ollama call failed: {ollama_error}")
+                
+                # Try OpenAI if API key is available
+                if self.settings.OPENAI_API_KEY:
+                    try:
+                        return self._call_openai(messages, **kwargs)
+                    except Exception as openai_error:
+                        self.logger.warning(f"OpenAI call failed: {openai_error}")
+                
+                # Try Google if API key is available
+                if self.settings.GOOGLE_API_KEY:
+                    try:
+                        return self._call_google(messages, **kwargs)
+                    except Exception as google_error:
+                        self.logger.warning(f"Google call failed: {google_error}")
+                
+                # If all providers fail, raise the original Ollama error
+                raise LLMError(f"All LLM providers failed. Last error: {ollama_error}")
                 
         except Exception as e:
             self.logger.error(f"LLM call failed: {e}")
@@ -79,15 +98,15 @@ class LLMService:
         except Exception as e:
             error_str = str(e).lower()
             if "quota" in error_str or "429" in error_str or "insufficient_quota" in error_str:
-                self.logger.warning("OpenAI quota exceeded, falling back to local response")
+                self.logger.warning("OpenAI quota exceeded, falling back to Ollama")
                 return self._get_local_fallback_response(messages)
             elif "rate limit" in error_str:
                 raise RetryableError(f"OpenAI rate limit: {e}")
             else:
                 raise LLMError(f"OpenAI API error: {e}")
     
-    def _call_local_llm(self, messages: List[Dict[str, str]], **kwargs) -> str:
-        """Call local Ollama LLM."""
+    def _call_ollama(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Call Ollama LLM API."""
         try:
             import requests
             import json
@@ -104,34 +123,49 @@ class LLMService:
                 elif role == 'assistant':
                     prompt += f"Assistant: {content}\n\n"
             
-            # Ollama API endpoint
-            ollama_url = "http://localhost:11434/api/generate"
+            # Ollama API endpoint using configured settings
+            ollama_url = f"http://{self.settings.OLLAMA_HOST}:{self.settings.OLLAMA_PORT}/api/generate"
+            
+            # Get LLM config values
+            model = self.settings.OLLAMA_MODEL
+            temperature = kwargs.get('temperature', self.settings.LLM_TEMPERATURE)
+            max_tokens = kwargs.get('max_tokens', self.settings.LLM_MAX_TOKENS)
+            timeout = self.settings.LLM_TIMEOUT
             
             # Prepare the request data
             data = {
-                "model": "llama3:latest",  # Use the available model
+                "model": model,
                 "prompt": prompt,
-                "stream": False
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens
+                }
             }
             
-            self.logger.info(f"Calling local Ollama LLM at {ollama_url}")
-            response = requests.post(ollama_url, json=data, timeout=30)
+            self.logger.info(f"Calling Ollama LLM at {ollama_url} with model {model}")
+            response = requests.post(ollama_url, json=data, timeout=timeout)
             
             if response.status_code == 200:
                 result = response.json()
-                return result.get('response', 'No response from local LLM')
+                return result.get('response', 'No response from Ollama LLM')
             else:
                 self.logger.warning(f"Ollama API returned status {response.status_code}")
                 raise Exception(f"Ollama API error: {response.status_code}")
                 
         except Exception as e:
-            self.logger.error(f"Local LLM call failed: {e}")
-            raise LLMError(f"Local LLM call failed: {e}")
+            self.logger.error(f"Ollama LLM call failed: {e}")
+            raise LLMError(f"Ollama LLM call failed: {e}")
 
+    def _call_local_llm(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Call local Ollama LLM (legacy fallback method)."""
+        self.logger.warning("Using legacy _call_local_llm method, consider using _call_ollama directly")
+        return self._call_ollama(messages, **kwargs)
+    
     def _get_local_fallback_response(self, messages: List[Dict[str, str]]) -> str:
-        """Call local Ollama LLM when external LLM is unavailable."""
-        self.logger.info("Calling local Ollama LLM as fallback")
-        return self._call_local_llm(messages)
+        """Call Ollama LLM when external LLM is unavailable."""
+        self.logger.info("Calling Ollama LLM as fallback")
+        return self._call_ollama(messages)
     
     def _call_google(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Call Google Generative AI API."""

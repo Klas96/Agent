@@ -29,12 +29,12 @@ class ContentParamNode(SimpleNode):
             Processing result with routing information
         """
         try:
-            agent_action = shared.get("agent_action", {})
+            agent_action = shared.agent_action or {}
             params = agent_action.get("parameters", {})
             
             # Get chosen subtype and duration from previous node
-            subtype = params.get("subtype") or shared.get("chosen_subtype")
-            duration = params.get("duration") or shared.get("chosen_duration")
+            subtype = params.get("subtype") or getattr(shared, 'chosen_subtype', None)
+            duration = params.get("duration") or getattr(shared, 'chosen_duration', None)
             
             self.logger.info(f"Preparing content params: type={params.get('type')}, subtype={subtype}, duration={duration}")
             
@@ -49,7 +49,7 @@ class ContentParamNode(SimpleNode):
             )
             
             # Store request in shared state for next node
-            shared["content_request"] = content_request
+            shared.content_request = content_request
             
             self.logger.info(f"Content request prepared: {content_request}")
             

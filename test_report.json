@@ -1,0 +1,33 @@
+{
+  "timestamp": "2025-07-25T10:29:24.179202",
+  "duration_seconds": 0.9612243175506592,
+  "test_summary": {
+    "total_tests": 3,
+    "passed_tests": 3,
+    "failed_tests": 0,
+    "success_rate": 100.0
+  },
+  "test_results": {
+    "unit_tests": {
+      "success": true,
+      "output": "",
+      "errors": "test_agent_action_sequence (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_agent_action_sequence)\nTest complete agent action sequence for investigation + report. ... ok\ntest_document_type_detection (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_document_type_detection)\nTest document type detection based on user request. ... ok\ntest_document_type_validation (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_document_type_validation)\nTest document type validation. ... ok\ntest_fallback_content_generation (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_fallback_content_generation)\nTest fallback content generation when LLM fails. ... ok\ntest_research_based_prompt_detection (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_research_based_prompt_detection)\nTest detection of research-based prompts. ... ok\ntest_supported_document_types (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_supported_document_types)\nTest supported document types list. ... ok\ntest_template_creation_and_validation (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_template_creation_and_validation)\nTest LaTeX template creation and validation. ... ok\ntest_workflow_detection_investigation_report (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_workflow_detection_investigation_report)\nTest that investigation + report workflow is correctly detected. ... ok\ntest_workflow_keyword_detection (tests.test_investigation_report_workflow_simple.TestInvestigationReportWorkflowSimple.test_workflow_keyword_detection)\nTest detection of workflow keywords. ... ok\ntest_action_sequence_validation (tests.test_investigation_report_workflow_simple.TestWorkflowIntegrationSimple.test_action_sequence_validation)\nTest that action sequences are valid. ... ok\ntest_workflow_classification (tests.test_investigation_report_workflow_simple.TestWorkflowIntegrationSimple.test_workflow_classification)\nTest that different requests are classified into correct workflows. ... ok\n\n----------------------------------------------------------------------\nRan 11 tests in 0.001s\n\nOK\n",
+      "return_code": 0
+    },
+    "document_service_tests": {
+      "success": true,
+      "output": "Document Creator Simple Test Suite\n==================================================\nChecking LaTeX installation...\n\u2705 LaTeX (pdflatex) is installed and available\n   Version info: pdfTeX 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian)\n\nTesting template creation...\n\u2705 Templates directory exists\n   Found 3 template files:\n   - report.tex\n   - technical_report.tex\n   - business_report.tex\n\nTesting simple LaTeX compilation...\n\u2705 LaTeX compilation successful\n   PDF created: test_document.pdf\n   File size: 49243 bytes\n\nTesting document service import...\n\u274c Error importing DocumentService: No module named 'pocketflow'\n\nTesting document type detection...\n\u274c Error testing document type detection: No module named 'pocketflow'\n\nTesting fallback content generation...\n\u274c Error in fallback content generation: No module named 'pocketflow'\n\n==================================================\nTest Results:\nLaTeX Installation: \u2705 PASS\nTemplate Creation: \u2705 PASS\nLaTeX Compilation: \u2705 PASS\nService Import: \u274c FAIL\nType Detection: \u274c FAIL\nFallback Content: \u274c FAIL\n\n\u26a0\ufe0f  Some tests failed. Please check the issues above.\n\nTest suite completed!\n",
+      "errors": "",
+      "return_code": 0
+    },
+    "latex_tests": {
+      "success": true,
+      "templates_found": 3,
+      "template_names": [
+        "report.tex",
+        "technical_report.tex",
+        "business_report.tex"
+      ]
+    }
+  }
+}

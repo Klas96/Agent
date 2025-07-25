@@ -1,15 +1,16 @@
 """
 Email post-processing node for PocketFlow.
 
-This module contains the PostProcessNode for handling email responses.
+This module contains the PostprocessEmailNode for final email processing.
 """
 
 from typing import Dict, Any, Optional
 from ...core.node import SimpleNode
-from ...core.types import SharedState, EmailSendRequest
+from ...core.types import SharedState
 from ...utils.logging import get_logger
+from ...utils.errors import EmailError
 from ...services import email_service
-from utils.email_utils import extract_email
+from ...utils.email_utils import extract_email
 
 
 class PostProcessNode(SimpleNode):

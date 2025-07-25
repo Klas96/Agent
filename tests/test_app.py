@@ -1,137 +1,116 @@
 #!/usr/bin/env python3
 """
-Test PocketFlow Application
-
-This test verifies that the PocketFlow application is properly configured and can run.
+Test script for PocketFlow application
 """
 
-import sys
 import os
-sys.path.append('/opt/pocketflow')
-
+import sys
 from src.pocketflow.config.settings import get_settings
-from src.pocketflow.utils.logging import setup_logging, get_logger
-from src.pocketflow.flows.manager import flow_manager
-from src.pocketflow.core.types import SharedState
 
-def test_environment_variables():
-    """Test that all required environment variables are set."""
+def test_env_vars():
+    """Test that environment variables are loaded"""
     print("=== Environment Variables Test ===")
     
     try:
         settings = get_settings()
-        
-        # Check that settings loaded successfully
         print("✓ Settings loaded successfully")
         
-        # Check required settings
+        # Check key settings
         required_settings = [
-            ("EMAIL_USERNAME", settings.EMAIL_USERNAME),
-            ("EMAIL_PASSWORD", settings.EMAIL_PASSWORD),
-            ("EMAIL_HOST", settings.EMAIL_HOST),
-            ("EMAIL_PORT", settings.EMAIL_PORT),
-            ("OPENAI_API_KEY", settings.OPENAI_API_KEY),
+            'EMAIL_USERNAME',
+            'EMAIL_PASSWORD', 
+            'EMAIL_HOST',
+            'EMAIL_PORT',
+            'OPENAI_API_KEY'
         ]
         
-        for name, value in required_settings:
+        missing_settings = []
+        for setting_name in required_settings:
+            value = getattr(settings, setting_name, None)
             if value:
-                # Mask sensitive values
-                if "PASSWORD" in name or "KEY" in name:
-                    masked_value = "*" * min(len(str(value)), 20)
-                    print(f"✓ {name}: {masked_value} (set)")
-                else:
-                    print(f"✓ {name}: {value} (set)")
+                print(f"✓ {setting_name}: {'*' * len(str(value))} (set)")
             else:
-                print(f"✗ {name}: Not set")
-                return False
+                print(f"✗ {setting_name}: NOT SET")
+                missing_settings.append(setting_name)
         
-        print("✓ All required settings are set!")
-        return True
-        
+        if missing_settings:
+            print(f"\n⚠️  Missing settings: {', '.join(missing_settings)}")
+            print("Please add these to your .env file")
+            return False
+        else:
+            print("\n✓ All required settings are set!")
+            return True
+            
     except Exception as e:
-        print(f"✗ Settings test failed: {e}")
+        print(f"✗ Settings loading failed: {e}")
         return False
 
 def test_imports():
-    """Test that all required modules can be imported."""
+    """Test that key modules can be imported"""
     print("\n=== Import Test ===")
     
     try:
-        # Test flow manager import
+        from src.pocketflow.flows.manager import flow_manager
         print("✓ Flow manager imported successfully")
-        
-        # Test basic imports
-        from src.pocketflow.nodes.email import FetchEmailNode, SendEmailNode
-        print("✓ Email nodes imported successfully")
-        
-        print("✓ All imports successful")
-        return True
-        
     except Exception as e:
-        print(f"✗ Import test failed: {e}")
+        print(f"✗ Flow manager import failed: {e}")
         return False
+    
+    try:
+        from src.pocketflow.nodes import FetchEmailNode
+        print("✓ Nodes imported successfully")
+    except Exception as e:
+        print(f"✗ Nodes import failed: {e}")
+        return False
+    
+    return True
 
 def test_basic_functionality():
-    """Test basic application functionality."""
+    """Test basic application functionality"""
     print("\n=== Basic Functionality Test ===")
     
     try:
-        # Test flow manager creation
+        # Test that we can create a flow manager
+        from src.pocketflow.flows.manager import flow_manager
         print("✓ Flow manager created successfully")
         
-        # Test shared state initialization
-        shared_state = SharedState()
+        # Test that we can access the shared state
+        from src.pocketflow.core.types import SharedState
+        shared = SharedState()
         print("✓ Shared state initialized")
         
-        # Test available flows
-        available_flows = flow_manager.get_available_flows()
-        print(f"✓ Available flows: {len(available_flows)} flows found")
+        # Test that we can get available flows
+        flows = flow_manager.get_available_flows()
+        print(f"✓ Available flows: {len(flows)} flows found")
         
         print("✓ Basic functionality test passed")
         return True
-        
     except Exception as e:
         print(f"✗ Basic functionality test failed: {e}")
         return False
 
-def main():
-    """Run all application tests."""
+if __name__ == "__main__":
     print("Running PocketFlow Application Test...")
     print("=" * 50)
     
-    tests = [
-        test_environment_variables,
-        test_imports,
-        test_basic_functionality
-    ]
+    env_ok = test_env_vars()
+    imports_ok = test_imports()
+    func_ok = test_basic_functionality()
     
-    passed = 0
-    total = len(tests)
+    print("\n" + "=" * 50)
+    print("Test Results:")
+    print(f"Environment Variables: {'✓' if env_ok else '✗'}")
+    print(f"Imports: {'✓' if imports_ok else '✗'}")
+    print(f"Basic Functionality: {'✓' if func_ok else '✗'}")
     
-    for test in tests:
-        if test():
-            passed += 1
-        print()
-    
-    print("=" * 50)
-    print(f"Test Results: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 All tests passed! Application is ready to run.")
-        print()
-        print("To start the service:")
+    if env_ok and imports_ok and func_ok:
+        print("\n🎉 All tests passed! Application is ready to run.")
+        print("\nTo start the service:")
         print("  sudo systemctl start pocketflow")
-        print()
-        print("To check the service status:")
+        print("\nTo check the service status:")
         print("  sudo systemctl status pocketflow")
-        print()
-        print("To view logs:")
+        print("\nTo view logs:")
         print("  sudo journalctl -u pocketflow -f")
-        return True
     else:
-        print("❌ Some tests failed")
-        return False
-
-if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1) 
+        print("\n⚠️  Some tests failed. Please check the issues above.")
+        sys.exit(1)

@@ -40,11 +40,12 @@ class EmailService:
         Raises:
             EmailError: If email fetching fails
         """
+        imap_server = None
         try:
             self.logger.info("Fetching unread emails...")
             
-            # Connect to IMAP server
-            imap_server = self._get_imap_server()
+            # Create a fresh IMAP connection for this operation
+            imap_server = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
             imap_server.login(self.settings.EMAIL_USERNAME, self.settings.EMAIL_PASSWORD)
             imap_server.select('INBOX')
             
@@ -74,8 +75,11 @@ class EmailService:
             self.logger.error(f"Failed to fetch emails: {e}")
             raise EmailError(f"Email fetching failed: {e}")
         finally:
-            if self._imap_connection:
-                self._imap_connection.close()
+            if imap_server:
+                try:
+                    imap_server.close()
+                except Exception as e:
+                    self.logger.warning(f"Error closing IMAP connection: {e}")
     
     def send_email(self, request: EmailSendRequest) -> bool:
         """
@@ -134,10 +138,12 @@ class EmailService:
         Returns:
             True if successfully marked as read
         """
+        imap_server = None
         try:
             self.logger.info(f"Marking email {email_id} as read")
             
-            imap_server = self._get_imap_server()
+            # Create a fresh IMAP connection for this operation
+            imap_server = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
             imap_server.login(self.settings.EMAIL_USERNAME, self.settings.EMAIL_PASSWORD)
             imap_server.select('INBOX')
             
@@ -151,8 +157,11 @@ class EmailService:
             self.logger.error(f"Failed to mark email as read: {e}")
             return False
         finally:
-            if self._imap_connection:
-                self._imap_connection.close()
+            if imap_server:
+                try:
+                    imap_server.close()
+                except Exception as e:
+                    self.logger.warning(f"Error closing IMAP connection: {e}")
     
     def _get_smtp_server(self) -> smtplib.SMTP:
         """Get SMTP server connection."""
@@ -192,7 +201,7 @@ class EmailService:
             return EmailData(
                 id=email_id,
                 thread_id=thread_id,
-                from_=from_header,
+                from_=from_header,  # Use the field name 'from_' which has alias 'from'
                 to=to_header,
                 subject=subject,
                 body=body,

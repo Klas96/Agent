@@ -29,15 +29,15 @@ class PopAgentActionNode(SimpleNode):
             Processing result with routing information
         """
         try:
-            queue = shared.get("action_queue", [])
+            queue = shared.action_queue or []
             if not queue:
                 self.logger.info("No more actions in queue")
                 return {"route": "finish"}
             
             # Pop the next action
             action = queue.pop(0)
-            shared["action_queue"] = queue
-            shared["agent_action"] = action
+            shared.action_queue = queue
+            shared.agent_action = action
             
             self.logger.info(f"Popped action: {action.get('action', 'unknown')}")
             

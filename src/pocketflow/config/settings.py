@@ -28,9 +28,11 @@ class Settings(BaseSettings):
     EMAIL_USE_TLS: bool = Field(default=True, env="EMAIL_USE_TLS")
     
     # LLM Configuration
-    LLM_PROVIDER: str = Field(default="openai", env="LLM_PROVIDER")
     OPENAI_API_KEY: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     GOOGLE_API_KEY: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
+    OLLAMA_HOST: str = Field(default="localhost", env="OLLAMA_HOST")
+    OLLAMA_PORT: int = Field(default=11434, env="OLLAMA_PORT")
+    OLLAMA_MODEL: str = Field(default="llama3:latest", env="OLLAMA_MODEL")
     LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
     LLM_MAX_TOKENS: int = Field(default=4000, env="LLM_MAX_TOKENS")
     LLM_TEMPERATURE: float = Field(default=0.7, env="LLM_TEMPERATURE")
@@ -60,6 +62,9 @@ class Settings(BaseSettings):
     # Security
     GREENLIST_FILE: str = Field(default="greenlist.yaml", env="GREENLIST_FILE")
     TOKEN_PRICE_USD: float = Field(default=0.01, env="TOKEN_PRICE_USD")
+    
+    # Flask Configuration
+    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
     
     class Config:
         env_file = ".env"
@@ -119,6 +124,21 @@ config_manager = ConfigManager()
 def get_settings() -> Settings:
     """Get application settings."""
     return config_manager.settings
+
+
+def get_llm_config():
+    """Get LLM configuration from settings."""
+    settings = get_settings()
+    return {
+        'provider': 'ollama', # Default to Ollama
+        'model': settings.LLM_MODEL,
+        'max_tokens': settings.LLM_MAX_TOKENS,
+        'temperature': settings.LLM_TEMPERATURE,
+        'timeout': settings.LLM_TIMEOUT,
+        'ollama_host': settings.OLLAMA_HOST,
+        'ollama_port': settings.OLLAMA_PORT,
+        'ollama_model': settings.OLLAMA_MODEL
+    }
 
 
 def get_config(name: str = None) -> ConfigModel:

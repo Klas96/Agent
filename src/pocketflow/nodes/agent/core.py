@@ -1,7 +1,7 @@
 """
 Core agent node for PocketFlow.
 
-This node handles LLM interactions and action extraction.
+This module contains the AgentNode for LLM-based decision making.
 """
 
 import json
@@ -9,12 +9,12 @@ import re
 from typing import Dict, Any, List, Optional
 
 from ...core.node import SimpleNode
-from ...core.types import SharedState, AgentAction
+from ...core.types import SharedState, AgentAction, ActionType
 from ...services.llm_service import LLMService
 from ...utils.logging import get_logger
 from ...utils.errors import LLMError
 from ...utils.prompt_utils import build_system_prompt
-from utils.email_utils import extract_email
+from ...utils.email_utils import extract_email
 
 
 def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:

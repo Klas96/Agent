@@ -19,7 +19,8 @@ from .agent import (
 from .content import (
     ContentCreatorNode,
     ContentParamNode,
-    GenerateContentNode
+    GenerateContentNode,
+    DocumentGeneratorNode
 )
 
 from .investigation import (
@@ -48,7 +49,7 @@ class FinishNode(SimpleNode):
         logger = get_logger("FinishNode")
         
         # Mark the email as read to prevent infinite loops
-        email = shared.get("email")
+        email = getattr(shared, 'email', None)
         if email and email.get("id"):
             try:
                 from ..services import email_service
@@ -80,6 +81,7 @@ __all__ = [
     "ContentCreatorNode",
     "ContentParamNode",
     "GenerateContentNode",
+    "DocumentGeneratorNode",
     
     # Investigation nodes
     "InvestigateTopicNode",

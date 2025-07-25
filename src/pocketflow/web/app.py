@@ -20,6 +20,9 @@ def create_app(config_name=None):
     settings = get_settings()
     app.config.from_object(settings)
     
+    # Set Flask secret key for sessions
+    app.config['SECRET_KEY'] = settings.SECRET_KEY
+    
     # Enable CORS for development
     CORS(app)
     

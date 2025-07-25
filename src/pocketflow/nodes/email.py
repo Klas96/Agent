@@ -1,16 +1,16 @@
 """
-Email nodes for PocketFlow.
+Email processing nodes for PocketFlow.
 
-This module provides email-related nodes for the PocketFlow system.
-Note: Individual email nodes are now in the email/ subdirectory.
+This module contains nodes for email processing operations.
 """
 
 from typing import Dict, Any, Optional
 from .core.node import SimpleNode
-from .core.types import SharedState, EmailSendRequest
+from .core.types import SharedState
 from .utils.logging import get_logger
+from .utils.errors import EmailError
 from .services import email_service
-from utils.email_utils import extract_email
+from .utils.email_utils import extract_email
 
 # Import the dedicated email nodes
 from .email.fetch import FetchEmailNode
