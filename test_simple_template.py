@@ -8,31 +8,18 @@ os.chdir('/opt/pocketflow')
 # Add the path
 sys.path.append('/opt/pocketflow')
 
-from control_panel import app
+from src.pocketflow.web.app import create_app
 from flask import render_template
 
-# Test data
-test_users = [
-    {
-        "email": "test@example.com",
-        "name": "Test User",
-        "tokens": 10,
-        "created_at": "2025-07-24 15:00:00",
-        "updated_at": "2025-07-24 15:00:00"
-    }
-]
+# Create app
+app = create_app()
 
 # Test template rendering
 with app.app_context():
     try:
-        result = render_template('users.html', users=test_users)
-        print(f"✅ Template rendered successfully, length: {len(result)}")
-        
-        # Check if the result contains user data
-        if "test@example.com" in result:
-            print("✅ Template contains user data")
-        else:
-            print("❌ Template does not contain user data")
+        result = render_template('simple_control_panel.html', users=[], message="")
+        print(f"Template rendered successfully, length: {len(result)}")
+        print("✅ Template rendering works")
             
     except Exception as e:
         print(f"❌ Template rendering error: {e}") 

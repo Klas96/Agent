@@ -1,17 +1,47 @@
+#!/usr/bin/env python3
+"""
+Check Bitcoin balance using Electrum RPC.
+"""
+
+import sys
 import os
+sys.path.append('/opt/pocketflow')
+
 import json
 import requests
+from src.pocketflow.config.settings import get_settings
+from src.pocketflow.utils.errors import BitcoinError
 
-url = f"http://localhost:{os.environ.get('ELECTRUM_RPCPORT', '7777')}/"
-payload = {
-    "id": 0,
-    "method": "getbalance",
-    "params": []
-}
-headers = {"Content-Type": "application/json"}
-user = os.environ.get("ELECTRUM_RPCUSER")
-password = os.environ.get("ELECTRUM_RPCPASSWORD")
-auth = (user, password) if user and password else None
+def main():
+    """Check Bitcoin balance."""
+    try:
+        # Get settings
+        settings = get_settings()
+        
+        # Build RPC URL
+        url = f"http://localhost:{settings.ELECTRUM_PORT}/"
+        
+        payload = {
+            "id": 0,
+            "method": "getbalance",
+            "params": []
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        # Use settings for authentication
+        user = settings.ELECTRUM_USERNAME
+        password = settings.ELECTRUM_PASSWORD
+        auth = (user, password) if user and password else None
+        
+        response = requests.post(url, data=json.dumps(payload), headers=headers, auth=auth)
+        result = response.json()
+        
+        print(f"Bitcoin Balance: {result}")
+        return result
+        
+    except Exception as e:
+        print(f"Error checking Bitcoin balance: {e}")
+        return None
 
-response = requests.post(url, data=json.dumps(payload), headers=headers, auth=auth)
-print(response.json()) 
+if __name__ == "__main__":
+    main() 

@@ -40,6 +40,14 @@
                                 <div class="form-text">The user's display name</div>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="personality" class="form-label">Personality</label>
+                                <textarea class="form-control" id="personality" name="personality" 
+                                          rows="3" placeholder="User's personality description">{{ user.personality or '' }}</textarea>
+                                <div class="form-text">The user's personality for AI interactions</div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="row">
@@ -96,6 +104,10 @@
                 <div class="mb-3">
                     <strong>Name:</strong><br>
                     <span class="text-muted">{{ user.name or 'Not set' }}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Personality:</strong><br>
+                    <span class="text-muted">{{ user.personality or 'Not set' }}</span>
                 </div>
                 <div class="mb-3">
                     <strong>Current Tokens:</strong><br>

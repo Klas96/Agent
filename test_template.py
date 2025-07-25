@@ -8,11 +8,15 @@ os.chdir('/opt/pocketflow')
 # Add the path
 sys.path.append('/opt/pocketflow')
 
-from control_panel import app, get_all_users
+from src.pocketflow.web.app import create_app
+from src.pocketflow.services import database_service
 from flask import render_template
 
-# Get users
-users = get_all_users()
+# Create app
+app = create_app()
+
+# Get users using the centralized database service
+users = database_service.get_all_users()
 print(f"Users found: {len(users)}")
 if users:
     print(f"First user: {users[0]}")

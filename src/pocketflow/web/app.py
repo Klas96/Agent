@@ -2,7 +2,7 @@
 Flask application factory for PocketFlow control panel.
 """
 
-from flask import Flask
+from flask import Flask, redirect, url_for
 from flask_cors import CORS
 import os
 from pathlib import Path
@@ -33,6 +33,12 @@ def create_app(config_name=None):
     
     # Create static directory if it doesn't exist
     static_folder.mkdir(exist_ok=True)
+    
+    # Root route that redirects to admin dashboard
+    @app.route('/')
+    def index():
+        """Redirect root to admin dashboard."""
+        return redirect(url_for('admin.dashboard'))
     
     logger = get_logger("WebApp")
     logger.info("PocketFlow Control Panel initialized")

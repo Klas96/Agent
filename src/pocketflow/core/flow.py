@@ -1,15 +1,16 @@
 """
-Core flow engine for PocketFlow.
+Core flow abstractions for PocketFlow.
 
-This module provides the main flow execution engine with routing and monitoring.
+This module defines the Flow class and related abstractions.
 """
 
 import time
 import logging
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass
-from .types import SharedState, NodeResult, FlowConfig, FlowType
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Callable, Any
 from .node import Node
+from .types import SharedState, NodeResult, FlowType, FlowConfig
+from ..utils.logging import get_logger
 
 
 @dataclass
@@ -42,7 +43,7 @@ class Flow:
         )
         self.steps: Dict[str, FlowStep] = {}
         self.routing: Dict[str, Dict[str, str]] = {}
-        self.logger = logging.getLogger(f"pocketflow.flow.{name}")
+        self.logger = get_logger(f"pocketflow.flow.{name}")
         self.start_step: Optional[str] = None
         self.end_steps: List[str] = []
         
@@ -141,9 +142,10 @@ class Flow:
                 
                 # Execute current step
                 step = self.steps[current_step]
-                self.logger.info(f"Executing step: {current_step}")
-                
+                self.logger.info(f"=== Executing step: {current_step} ===")
                 result = step.node.run(shared)
+                post_result = result.metadata.get("post_result", "default")
+                self.logger.info(f"=== Step: {current_step}, post_result/route: {post_result} ===")
                 
                 if not result.success:
                     self.logger.error(f"Step {current_step} failed: {result.error}")
@@ -151,6 +153,7 @@ class Flow:
                 
                 # Determine next step
                 next_step = self._determine_next_step(current_step, result)
+                self.logger.info(f"=== Step: {current_step}, next_step: {next_step} ===")
                 
                 if next_step in self.end_steps:
                     self.logger.info(f"Flow completed at end step: {next_step}")
@@ -221,7 +224,7 @@ class FlowRouter:
     
     def __init__(self):
         self.flows: Dict[str, Flow] = {}
-        self.logger = logging.getLogger("pocketflow.router")
+        self.logger = get_logger("pocketflow.router")
     
     def register_flow(self, flow: Flow):
         """Register a flow with the router."""
@@ -291,7 +294,8 @@ class FlowBuilder:
             name=name,
             nodes=[],
             flow_type=flow_type,
-            requires_tokens=requires_tokens
+            requires_tokens=requires_tokens,
+            timeout=300  # 5 minutes default timeout
         ))
     
     def add_step(self, name: str, node: Node, conditions: Optional[Dict[str, Callable]] = None) -> 'FlowBuilder':

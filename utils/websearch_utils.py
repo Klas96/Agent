@@ -1,6 +1,7 @@
 import logging
+from src.pocketflow.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("websearch_utils")
 
 def web_search(query: str) -> str:
     """Stub: Perform web search."""

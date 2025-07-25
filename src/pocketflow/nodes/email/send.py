@@ -1,16 +1,16 @@
 """
-Send email node for PocketFlow.
+Email sending node for PocketFlow.
 
-This node handles sending emails with proper threading and attachments.
+This module contains the SendEmailNode for sending email responses.
 """
 
 from typing import Dict, Any, Optional
-
 from ...core.node import SimpleNode
 from ...core.types import SharedState, EmailSendRequest
-from ...services import email_service
 from ...utils.logging import get_logger
 from ...utils.errors import EmailError
+from ...services import email_service
+from utils.email_utils import extract_email
 
 
 class SendEmailNode(SimpleNode):
@@ -41,7 +41,7 @@ class SendEmailNode(SimpleNode):
             # Determine recipient
             to = params.get("to")
             if not to:
-                to = shared.get("user") or self._extract_email(email.get("from", ""))
+                to = shared.get("user") or extract_email(email.get("from", ""))
             
             # Determine subject
             subject = params.get("subject")
@@ -79,23 +79,11 @@ class SendEmailNode(SimpleNode):
                 shared["sender_have_gotten_response"] = True
                 return {"route": "default"}
             else:
-                self.logger.error("Failed to send email")
-                return {"route": "send_failed", "error": "Email sending failed"}
+                raise EmailError("Email service returned failure")
                 
         except EmailError as e:
             self.logger.error(f"Email sending failed: {e}")
-            return {"route": "send_failed", "error": str(e)}
+            raise e
         except Exception as e:
             self.logger.error(f"Unexpected error in SendEmailNode: {e}")
-            return {"route": "send_failed", "error": str(e)}
-    
-    def _extract_email(self, sender: str) -> str:
-        """Extract email address from sender string."""
-        import re
-        # Use raw string and single backslash for dot
-        match = re.search(r'<([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>', sender)
-        if match:
-            return match.group(1)
-        # fallback: if sender is just the email
-        match = re.search(r'([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})', sender)
-        return match.group(1) if match else sender 
+            raise EmailError(f"Unexpected error in email sending: {e}") 

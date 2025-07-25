@@ -51,6 +51,16 @@
                         </div>
                     </div>
                     
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="userPersonality" class="form-label">Personality (Optional)</label>
+                                <textarea class="form-control" id="userPersonality" rows="3" placeholder="User's personality description"></textarea>
+                                <div class="form-text">The user's personality for AI interactions</div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
                         <strong>Note:</strong> A unique Bitcoin address will be automatically generated for this user.
@@ -111,6 +121,7 @@ $(document).ready(function() {
         
         const email = $('#userEmail').val().trim();
         const name = $('#userName').val().trim();
+        const personality = $('#userPersonality').val().trim();
         const tokens = parseInt($('#userTokens').val()) || 0;
         const notes = $('#userNotes').val().trim();
         
@@ -144,6 +155,12 @@ $(document).ready(function() {
         nameInput.value = name;
         form.appendChild(nameInput);
         
+        const personalityInput = document.createElement('input');
+        personalityInput.type = 'hidden';
+        personalityInput.name = 'personality';
+        personalityInput.value = personality;
+        form.appendChild(personalityInput);
+
         const tokensInput = document.createElement('input');
         tokensInput.type = 'hidden';
         tokensInput.name = 'initial_tokens';

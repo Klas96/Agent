@@ -7,7 +7,8 @@ This package contains all node implementations organized by functionality.
 from .email import (
     FetchEmailNode,
     SendEmailNode,
-    ConversationContextNode
+    ConversationContextNode,
+    PostProcessNode
 )
 
 from .agent import (
@@ -38,10 +39,30 @@ from .user_status import (
 )
 
 from ..core.node import SimpleNode
+from ..utils.logging import get_logger
 
 class FinishNode(SimpleNode):
     """A simple terminal node for flow completion."""
     def process(self, shared):
+        """Mark email as read and finish the flow."""
+        logger = get_logger("FinishNode")
+        
+        # Mark the email as read to prevent infinite loops
+        email = shared.get("email")
+        if email and email.get("id"):
+            try:
+                from ..services import email_service
+                email_id = email.get("id")
+                logger.info(f"Marking email {email_id} as read")
+                success = email_service.mark_as_read(email_id)
+                if success:
+                    logger.info(f"Email {email_id} marked as read successfully")
+                else:
+                    logger.warning(f"Failed to mark email {email_id} as read")
+            except Exception as e:
+                logger.error(f"Failed to mark email as read: {e}")
+        
+        logger.info("Flow completed successfully")
         return {"route": "finish"}
 
 __all__ = [
@@ -49,6 +70,7 @@ __all__ = [
     "FetchEmailNode",
     "SendEmailNode", 
     "ConversationContextNode",
+    "PostProcessNode",
     
     # Agent nodes
     "AgentNode",

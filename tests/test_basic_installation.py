@@ -119,7 +119,7 @@ def test_service_file():
 def test_database_service():
     """Test that database service can be initialized"""
     try:
-        from src.pocketflow.services.database_service import database_service
+        from src.pocketflow.services import database_service
         assert database_service is not None
         print("✓ Database service initialization successful")
     except Exception as e:

@@ -8,17 +8,26 @@ import os
 sys.path.append('/opt/pocketflow')
 
 from utils.electrum_utils import get_new_btc_address, get_btc_usd_price
-from utils.user_db import add_btc_address, get_btc_addresses, get_tokens
-from utils.llm_utils import call_llm
+from src.pocketflow.services import llm_service, database_service
 
-def test_btc_functionality():
+def test_btc_functionality(test_email=None):
     """Test the complete BTC address generation flow"""
+    
+    if not test_email:
+        if len(sys.argv) > 1:
+            test_email = sys.argv[1]
+        else:
+            test_email = input("Enter test email address: ")
+    
+    if not test_email:
+        print("Test email address is required.")
+        return False
     
     print("🧪 Testing Bitcoin Address Functionality")
     print("=" * 50)
     
     # Test email
-    test_email = "test@example.com"
+    print(f"Using test email: {test_email}")
     
     # 1. Generate new BTC address
     print("1. Generating new BTC address...")
@@ -40,12 +49,16 @@ def test_btc_functionality():
     
     # 3. Store address in database
     print("3. Storing address in database...")
-    add_btc_address(test_email, btc_address)
-    print(f"   ✅ Stored address for {test_email}")
+    success = database_service.add_btc_address(test_email, btc_address)
+    if success:
+        print(f"   ✅ Stored address for {test_email}")
+    else:
+        print("   ❌ Failed to store address in database")
+        return False
     
     # 4. Retrieve address from database
     print("4. Retrieving address from database...")
-    stored_addresses = get_btc_addresses(test_email)
+    stored_addresses = database_service.get_btc_addresses(test_email)
     if stored_addresses and btc_address in stored_addresses:
         print(f"   ✅ Retrieved: {btc_address}")
     else:

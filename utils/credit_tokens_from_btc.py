@@ -1,56 +1,57 @@
 #!/usr/bin/env python3
 """
-Bitcoin Payment Monitoring and Token Crediting System
+Monitor Bitcoin payments and credit tokens to users.
 
-This module monitors Bitcoin payments and automatically credits tokens to users
-when payments are received at their assigned addresses.
+This script monitors incoming Bitcoin payments and automatically credits tokens to users.
 """
 
-import json
+import os
+import sys
 import time
-import logging
 import sqlite3
+import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
-from decimal import Decimal
+from typing import Dict, List, Optional
 import requests
 
 from utils.electrum_utils import call_electrum_rpc, get_btc_usd_price
-from utils.user_db import get_user_by_email, update_user_tokens, get_btc_addresses
+from src.pocketflow.services import database_service
+from src.pocketflow.utils.errors import BitcoinError, DatabaseError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.pocketflow.utils.logging import get_logger
+logger = get_logger("credit_tokens_from_btc")
 
 # Configuration
-TOKEN_PRICE_USD = 0.01  # $0.01 per token
-MIN_CONFIRMATIONS = 1    # Minimum confirmations required
-CHECK_INTERVAL = 60      # Check for payments every 60 seconds
 DATABASE_PATH = "/opt/pocketflow/data/pocketflow.db"
+TOKEN_PRICE_USD = 0.01  # $0.01 per token
+MONITORING_INTERVAL = 60  # seconds
+PAYMENT_CONFIRMATIONS = 1  # minimum confirmations required
 
 class BTCPaymentMonitor:
-    """Monitors Bitcoin payments and credits tokens automatically."""
+    """Monitor Bitcoin payments and credit tokens to users."""
     
     def __init__(self):
-        self.processed_payments = set()  # Track processed payment IDs
-        self.last_check_time = None
-        
+        self.processed_payments = set()
+        self.logger = logger
+    
     def get_wallet_transactions(self) -> List[Dict]:
-        """Get recent transactions from Electrum wallet."""
+        """Get recent wallet transactions."""
         try:
-            # Get recent transactions (last 24 hours)
+            # Get transactions from the last 24 hours
             since_timestamp = int((datetime.now() - timedelta(hours=24)).timestamp())
             
-            result = call_electrum_rpc("listtransactions", [50])  # Get last 50 transactions
+            result = call_electrum_rpc("listtransactions", ["", 100, 0, True])
             if not result:
-                logger.warning("Failed to get wallet transactions")
+                logger.error("Failed to get wallet transactions")
                 return []
-                
-            # Filter for incoming transactions with sufficient confirmations
+            
+            # Filter for incoming transactions in the last 24 hours
             incoming_txs = []
             for tx in result:
                 if (tx.get('category') == 'receive' and 
-                    tx.get('confirmations', 0) >= MIN_CONFIRMATIONS and
+                    tx.get('confirmations', 0) >= PAYMENT_CONFIRMATIONS and
                     tx.get('time', 0) >= since_timestamp):
                     incoming_txs.append(tx)
                     
@@ -59,22 +60,30 @@ class BTCPaymentMonitor:
             
         except Exception as e:
             logger.error(f"Error getting wallet transactions: {e}")
-            return []
+            raise BitcoinError(f"Failed to get wallet transactions: {e}")
     
     def get_address_user_mapping(self) -> Dict[str, str]:
         """Get mapping of BTC addresses to user emails."""
         try:
+            # Get all users and their BTC addresses
+            mapping = {}
+            
+            # Get all users from the database
+            # Note: This would require adding a method to DatabaseService to get all users
+            # For now, we'll use a more robust approach by querying the database directly
+            # to get all users with BTC addresses
+            
             conn = sqlite3.connect(DATABASE_PATH)
             cursor = conn.cursor()
             
-            # Get all user BTC addresses
+            # Get all users with BTC addresses
             cursor.execute("""
-                SELECT email, btc_address 
-                FROM user_btc_addresses 
-                WHERE btc_address IS NOT NULL AND btc_address != ''
+                SELECT DISTINCT u.email, b.address 
+                FROM users u 
+                JOIN btc_addresses b ON u.email = b.email 
+                WHERE b.address IS NOT NULL AND b.address != ''
             """)
             
-            mapping = {}
             for email, address in cursor.fetchall():
                 if address and address != "None":
                     mapping[address] = email
@@ -85,7 +94,7 @@ class BTCPaymentMonitor:
             
         except Exception as e:
             logger.error(f"Error getting address-user mapping: {e}")
-            return {}
+            raise DatabaseError(f"Failed to get address-user mapping: {e}")
     
     def calculate_tokens_from_btc(self, btc_amount: float) -> int:
         """Calculate number of tokens based on BTC amount."""
@@ -93,7 +102,7 @@ class BTCPaymentMonitor:
             btc_price_usd = get_btc_usd_price()
             if not btc_price_usd:
                 logger.error("Failed to get BTC price")
-                return 0
+                raise BitcoinError("Failed to get BTC price")
                 
             usd_amount = btc_amount * btc_price_usd
             tokens = int(usd_amount / TOKEN_PRICE_USD)
@@ -103,33 +112,25 @@ class BTCPaymentMonitor:
             
         except Exception as e:
             logger.error(f"Error calculating tokens: {e}")
-            return 0
+            raise BitcoinError(f"Failed to calculate tokens: {e}")
     
     def credit_tokens_to_user(self, email: str, tokens: int, tx_id: str) -> bool:
         """Credit tokens to user and log the transaction."""
         try:
             # Update user tokens
-            success = update_user_tokens(email, tokens)
+            success = database_service.add_tokens(email, tokens)
             if not success:
                 logger.error(f"Failed to update tokens for {email}")
-                return False
+                raise DatabaseError(f"Failed to update tokens for {email}")
             
             # Log the payment transaction
             conn = sqlite3.connect(DATABASE_PATH)
             cursor = conn.cursor()
             
             cursor.execute("""
-                INSERT INTO btc_payments 
-                (email, btc_amount, usd_amount, tokens_credited, tx_id, timestamp)
+                INSERT INTO btc_payments (email, btc_amount, usd_amount, tokens_credited, tx_id, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                email,
-                None,  # We'll calculate this later
-                None,  # We'll calculate this later  
-                tokens,
-                tx_id,
-                datetime.now().isoformat()
-            ))
+            """, (email, None, None, tokens, tx_id, datetime.now().isoformat()))
             
             conn.commit()
             conn.close()
@@ -138,8 +139,8 @@ class BTCPaymentMonitor:
             return True
             
         except Exception as e:
-            logger.error(f"Error crediting tokens to {email}: {e}")
-            return False
+            logger.error(f"Failed to credit tokens to {email}: {e}")
+            raise DatabaseError(f"Failed to credit tokens to {email}: {e}")
     
     def process_payment(self, tx: Dict, address_mapping: Dict[str, str]) -> bool:
         """Process a single payment transaction."""
@@ -153,31 +154,33 @@ class BTCPaymentMonitor:
                 logger.debug(f"Transaction {tx_id} already processed")
                 return False
             
-            # Find user for this address
-            user_email = address_mapping.get(address)
-            if not user_email:
-                logger.warning(f"No user found for address {address}")
+            # Check if address belongs to a user
+            if address not in address_mapping:
+                logger.debug(f"Address {address} not associated with any user")
                 return False
+            
+            email = address_mapping[address]
+            logger.info(f"Processing payment: {btc_amount} BTC to {email}")
             
             # Calculate tokens
             tokens = self.calculate_tokens_from_btc(btc_amount)
             if tokens <= 0:
-                logger.warning(f"Invalid token calculation for {btc_amount} BTC")
+                logger.warning(f"Calculated tokens is {tokens} for {btc_amount} BTC")
                 return False
             
-            # Credit tokens
-            success = self.credit_tokens_to_user(user_email, tokens, tx_id)
+            # Credit tokens to user
+            success = self.credit_tokens_to_user(email, tokens, tx_id)
             if success:
                 self.processed_payments.add(tx_id)
-                logger.info(f"Successfully processed payment: {tx_id} -> {user_email} ({tokens} tokens)")
+                logger.info(f"Successfully processed payment: {tokens} tokens to {email}")
                 return True
             else:
-                logger.error(f"Failed to credit tokens for transaction {tx_id}")
+                logger.error(f"Failed to process payment for {email}")
                 return False
                 
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
-            return False
+            raise BitcoinError(f"Failed to process payment: {e}")
     
     def create_payment_tables(self):
         """Create necessary database tables for payment tracking."""
@@ -253,17 +256,17 @@ class BTCPaymentMonitor:
         self.create_payment_tables()
         
         if run_forever:
-            logger.info(f"Monitoring payments every {CHECK_INTERVAL} seconds...")
+            logger.info(f"Monitoring payments every {MONITORING_INTERVAL} seconds...")
             while True:
                 try:
                     self.run_monitoring_cycle()
-                    time.sleep(CHECK_INTERVAL)
+                    time.sleep(MONITORING_INTERVAL)
                 except KeyboardInterrupt:
                     logger.info("Payment monitoring stopped by user")
                     break
                 except Exception as e:
                     logger.error(f"Error in monitoring loop: {e}")
-                    time.sleep(CHECK_INTERVAL)
+                    time.sleep(MONITORING_INTERVAL)
         else:
             # Run once
             return self.run_monitoring_cycle()

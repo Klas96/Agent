@@ -357,8 +357,4 @@ class DatabaseService:
             
         except Exception as e:
             self.logger.error(f"Failed to record payment for {email}: {e}")
-            return False
-
-
-# Global database service instance
-database_service = DatabaseService() 
+            return False 

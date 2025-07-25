@@ -1,110 +1,47 @@
 """
-Fetch email node for PocketFlow.
+Email fetching node for PocketFlow.
 
-This node handles fetching unread emails and processing them.
+This module contains the FetchEmailNode for retrieving unread emails.
 """
 
-import re
-from typing import Optional, List, Dict, Any
-
+from typing import Dict, Any, Optional
 from ...core.node import SimpleNode
-from ...core.types import SharedState, EmailData
-from ...services import email_service, database_service
+from ...core.types import SharedState
 from ...utils.logging import get_logger
 from ...utils.errors import EmailError
-
-
-def extract_email(sender: str) -> str:
-    """
-    Extract email address from sender string.
-    
-    Args:
-        sender: Sender string that may contain email
-        
-    Returns:
-        Extracted email address
-    """
-    # Use raw string and single backslash for dot
-    match = re.search(r'<([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>', sender)
-    if match:
-        return match.group(1)
-    # fallback: if sender is just the email
-    match = re.search(r'([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})', sender)
-    return match.group(1) if match else sender
+from ...services import email_service
+from utils.email_utils import extract_email
 
 
 class FetchEmailNode(SimpleNode):
-    """Node for fetching and processing unread emails."""
+    """Node for fetching unread emails."""
     
-    def __init__(self, name: str = "fetch_email"):
-        super().__init__(name)
-        self.logger = get_logger("FetchEmailNode")
-    
-    def process(self, shared: SharedState) -> Dict[str, Any]:
-        """
-        Fetch unread emails and process the first one.
+    def process(self, shared: SharedState) -> Optional[Dict[str, Any]]:
+        """Fetch unread emails and store in shared state."""
+        logger = get_logger("FetchEmailNode")
         
-        Args:
-            shared: Shared state containing context
-            
-        Returns:
-            Processing result with routing information
-        """
         try:
-            self.logger.info("Fetching unread emails...")
-            
-            # Fetch unread emails using email service
+            logger.info("Fetching unread emails...")
             emails = email_service.fetch_unread_emails()
-            self.logger.info(f"Fetched {len(emails)} unread emails")
             
-            if not emails:
-                self.logger.info("No unread emails found")
-                shared["email"] = None
-                return {"route": "no_email"}
-            
-            # Process the first email
-            email = emails[0]
-            self.logger.info(f"Processing email: from={email.from_}, subject={email.subject}")
-            
-            # Greenlist check for sender
-            sender_email = extract_email(email.from_).strip().lower() if email.from_ else None
-            sender_domain = sender_email.split("@")[-1] if sender_email and "@" in sender_email else None
-            
-            # Check greenlist for sender
-            is_greenlisted = False
-            if sender_email:
-                is_greenlisted = database_service.is_greenlisted_email(sender_email)
-            if not is_greenlisted and sender_domain:
-                is_greenlisted = database_service.is_greenlisted_domain(sender_domain)
-            
-            if not is_greenlisted:
-                self.logger.info(f"Sender {email.from_} not in greenlist. Skipping email.")
-                shared["email"] = None
-                return {"route": "no_email"}
-            
-            # Accept the email
-            self.logger.info(f"Accepted email from {email.from_} (subject: {email.subject})")
-            shared["email"] = {
-                "id": email.id,
-                "from": email.from_,
-                "to": email.to,
-                "subject": email.subject,
-                "body": email.body,
-                "thread_id": email.thread_id,
-                "received_at": email.received_at
-            }
-            shared["user"] = extract_email(email.from_)
-            
-            # Mark email as read
-            email_service.mark_as_read(email.id)
-            
-            return {"route": "default"}
-            
-        except EmailError as e:
-            self.logger.error(f"Email fetching failed: {e}")
-            shared["email"] = None
-            return {"route": "no_email", "error": str(e)}
+            if emails:
+                # Store the first unread email in shared state
+                email_data = emails[0]
+                shared.email = {
+                    'id': email_data.id,
+                    'subject': email_data.subject,
+                    'from': email_data.sender,
+                    'body': email_data.body,
+                    'date': email_data.date,
+                    'message_id': email_data.message_id,
+                    'thread_id': email_data.thread_id
+                }
+                logger.info(f"Fetched email: {email_data.subject}")
+                return {"route": "default"}
+            else:
+                logger.info("No unread emails found")
+                return None
+                
         except Exception as e:
-            self.logger.error(f"Unexpected error in FetchEmailNode: {e}")
-            shared["email"] = None
-            return {"route": "no_email", "error": str(e)} 
+            logger.error(f"Error fetching emails: {e}")
+            raise EmailError(f"Failed to fetch emails: {e}") 

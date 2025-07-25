@@ -4,7 +4,7 @@ Admin routes for PocketFlow control panel.
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from typing import Dict, Any, List, Optional
 import json
-from ..services.database_service import database_service
+from ..services import database_service
 from ..core.types import User, BTCAddress, PaymentTransaction
 from ..utils.logging import get_logger
 
@@ -18,10 +18,10 @@ def get_db_connection():
     from pathlib import Path
     
     # Try production database first
-    db_path = Path("/opt/pocketflow/data/pocketflow.db")
+    db_path = Path("/opt/pocketflow/data/users.db")
     if not db_path.exists():
         # Fallback to local development database
-        db_path = Path("data/pocketflow.db")
+        db_path = Path("data/users.db")
         if not db_path.exists():
             # Create local database for development
             db_path.parent.mkdir(exist_ok=True)
@@ -333,6 +333,7 @@ def add_user_page():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         name = request.form.get("name", "").strip() or None
+        personality = request.form.get("personality", "").strip() or None
         initial_tokens = int(request.form.get("initial_tokens", 10))
         notes = request.form.get("notes", "").strip()
         
@@ -346,7 +347,7 @@ def add_user_page():
             return render_template("add_user.html")
         
         # Try to add user
-        if add_user(email, name, initial_tokens, notes):
+        if add_user(email, name, personality, initial_tokens, notes):
             flash(f"User {email} added successfully with {initial_tokens} tokens", "success")
             return redirect(url_for("admin.users_list"))
         else:
@@ -408,14 +409,15 @@ def edit_user(email):
         
         if request.method == "POST":
             name = request.form.get("name", "").strip() or None
+            personality = request.form.get("personality", "").strip() or None
             new_tokens = int(request.form.get("tokens", 0))
             
             if new_tokens < 0:
                 flash("Tokens cannot be negative", "error")
                 return render_template("edit_user.html", user=user)
             
-            # Update user with new name and tokens
-            if update_user(email, name, new_tokens):
+            # Update user with new name, personality and tokens
+            if update_user(email, name, personality, new_tokens):
                 flash(f"User {email} updated successfully", "success")
                 return redirect(url_for("admin.user_detail", email=email))
             else:
@@ -473,6 +475,8 @@ def api_add_user():
             return jsonify({"success": False, "error": "No data provided"})
         
         email = data.get("email", "").strip()
+        name = data.get("name", "").strip() or None
+        personality = data.get("personality", "").strip() or None
         initial_tokens = int(data.get("initial_tokens", 10))
         notes = data.get("notes", "").strip()
         
@@ -482,15 +486,55 @@ def api_add_user():
         if initial_tokens < 0:
             return jsonify({"success": False, "error": "Initial tokens cannot be negative"})
         
-        if add_user(email, initial_tokens, notes):
+        if add_user(email, name, personality, initial_tokens, notes):
             return jsonify({
                 "success": True, 
                 "message": f"User {email} added successfully",
-                "user": {"email": email, "tokens": initial_tokens}
+                "user": {"email": email, "name": name, "personality": personality, "tokens": initial_tokens}
             })
         else:
             return jsonify({"success": False, "error": f"Failed to add user {email}"})
     
     except Exception as e:
         logger.error(f"Error in API add user: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@admin_bp.route("/api/users/<email>", methods=["DELETE"])
+def api_delete_user(email):
+    """API endpoint for deleting users."""
+    try:
+        if delete_user(email):
+            return jsonify({"success": True, "message": f"User {email} deleted successfully"})
+        else:
+            return jsonify({"success": False, "error": "Failed to delete user"})
+    except Exception as e:
+        logger.error(f"Error in API delete user: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@admin_bp.route("/api/users/<email>", methods=["PUT"])
+def api_update_user(email):
+    """API endpoint for updating users."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"})
+        
+        name = data.get("name", "").strip() or None
+        personality = data.get("personality", "").strip() or None
+        tokens = int(data.get("tokens", 10))
+        
+        if tokens < 0:
+            return jsonify({"success": False, "error": "Tokens cannot be negative"})
+        
+        if update_user(email, name, personality, tokens):
+            return jsonify({
+                "success": True,
+                "message": f"User {email} updated successfully",
+                "user": {"email": email, "name": name, "personality": personality, "tokens": tokens}
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to update user"})
+    
+    except Exception as e:
+        logger.error(f"Error in API update user: {e}")
         return jsonify({"success": False, "error": str(e)}) 

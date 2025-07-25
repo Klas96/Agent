@@ -5,56 +5,59 @@ Test script for PocketFlow application
 
 import os
 import sys
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from src.pocketflow.config.settings import get_settings
 
 def test_env_vars():
     """Test that environment variables are loaded"""
     print("=== Environment Variables Test ===")
     
-    required_vars = [
-        'EMAIL_USER',
-        'EMAIL_PASS', 
-        'IMAP_SERVER',
-        'SMTP_SERVER',
-        'SMTP_PORT',
-        'OPENAI_API_KEY',
-        'ELEVENLABS_API_KEY',
-        'TEST_RECIPIENT_EMAIL'
-    ]
-    
-    missing_vars = []
-    for var in required_vars:
-        value = os.getenv(var)
-        if value:
-            print(f"✓ {var}: {'*' * len(value)} (set)")
+    try:
+        settings = get_settings()
+        print("✓ Settings loaded successfully")
+        
+        # Check key settings
+        required_settings = [
+            'EMAIL_USERNAME',
+            'EMAIL_PASSWORD', 
+            'EMAIL_HOST',
+            'EMAIL_PORT',
+            'OPENAI_API_KEY'
+        ]
+        
+        missing_settings = []
+        for setting_name in required_settings:
+            value = getattr(settings, setting_name, None)
+            if value:
+                print(f"✓ {setting_name}: {'*' * len(str(value))} (set)")
+            else:
+                print(f"✗ {setting_name}: NOT SET")
+                missing_settings.append(setting_name)
+        
+        if missing_settings:
+            print(f"\n⚠️  Missing settings: {', '.join(missing_settings)}")
+            print("Please add these to your .env file")
+            return False
         else:
-            print(f"✗ {var}: NOT SET")
-            missing_vars.append(var)
-    
-    if missing_vars:
-        print(f"\n⚠️  Missing environment variables: {', '.join(missing_vars)}")
-        print("Please add these to your .env file")
+            print("\n✓ All required settings are set!")
+            return True
+            
+    except Exception as e:
+        print(f"✗ Settings loading failed: {e}")
         return False
-    else:
-        print("\n✓ All environment variables are set!")
-        return True
 
 def test_imports():
     """Test that key modules can be imported"""
     print("\n=== Import Test ===")
     
     try:
-        from flow import flow
-        print("✓ Flow imported successfully")
+        from src.pocketflow.flows.manager import flow_manager
+        print("✓ Flow manager imported successfully")
     except Exception as e:
-        print(f"✗ Flow import failed: {e}")
+        print(f"✗ Flow manager import failed: {e}")
         return False
     
     try:
-        from nodes import FetchEmailNode
+        from src.pocketflow.nodes import FetchEmailNode
         print("✓ Nodes imported successfully")
     except Exception as e:
         print(f"✗ Nodes import failed: {e}")
@@ -67,13 +70,18 @@ def test_basic_functionality():
     print("\n=== Basic Functionality Test ===")
     
     try:
-        # Test that we can create a simple flow
-        from flow import flow
-        print("✓ Flow object created successfully")
+        # Test that we can create a flow manager
+        from src.pocketflow.flows.manager import flow_manager
+        print("✓ Flow manager created successfully")
         
         # Test that we can access the shared state
-        shared = {}
+        from src.pocketflow.core.types import SharedState
+        shared = SharedState()
         print("✓ Shared state initialized")
+        
+        # Test that we can get available flows
+        flows = flow_manager.get_available_flows()
+        print(f"✓ Available flows: {len(flows)} flows found")
         
         print("✓ Basic functionality test passed")
         return True

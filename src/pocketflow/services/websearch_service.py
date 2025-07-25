@@ -247,8 +247,4 @@ class WebSearchService:
     def clear_cache(self):
         """Clear the search cache."""
         self._search_cache.clear()
-        self.logger.info("Search cache cleared")
-
-
-# Global web search service instance
-websearch_service = WebSearchService() 
+        self.logger.info("Search cache cleared") 

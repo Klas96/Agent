@@ -30,6 +30,7 @@ class SharedState(BaseModel):
     btc_address: Optional[str] = Field(default=None, description="User's Bitcoin address")
     user_has_tokens: Optional[bool] = Field(default=None, description="Whether user has tokens")
     flow_type: Optional[str] = Field(default=None, description="Type of flow being executed")
+    action_queue: Optional[List[Dict[str, Any]]] = Field(default=None, description="Queue of actions to be processed")
     
     class Config:
         arbitrary_types_allowed = True

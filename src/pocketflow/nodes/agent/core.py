@@ -10,9 +10,11 @@ from typing import Dict, Any, List, Optional
 
 from ...core.node import SimpleNode
 from ...core.types import SharedState, AgentAction
-from ...services import llm_service
+from ...services.llm_service import LLMService
 from ...utils.logging import get_logger
 from ...utils.errors import LLMError
+from ...utils.prompt_utils import build_system_prompt
+from utils.email_utils import extract_email
 
 
 def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
@@ -58,6 +60,8 @@ class AgentNode(SimpleNode):
     def __init__(self, name: str = "agent"):
         super().__init__(name)
         self.logger = get_logger("AgentNode")
+        from ...services import llm_service
+        self.llm_service = llm_service
     
     def process(self, shared: SharedState) -> Dict[str, Any]:
         """
@@ -70,20 +74,40 @@ class AgentNode(SimpleNode):
             Processing result with routing information
         """
         try:
+            self.logger.error("CRITICAL: AgentNode.process method is being called!")
             self.logger.info("Processing agent request...")
+            self.logger.info("AgentNode.process called - about to call _build_messages")
             
             # Build messages for LLM
-            messages = self._build_messages(shared)
+            self.logger.info("About to call _build_messages")
+            self.logger.info(f"Shared state: {shared}")
+            self.logger.info(f"Shared email: {getattr(shared, 'email', None)}")
+            self.logger.info(f"Shared user: {getattr(shared, 'user', None)}")
+            
+            try:
+                messages = self._build_messages(shared)
+                self.logger.info(f"_build_messages returned {len(messages)} messages")
+            except Exception as e:
+                self.logger.error(f"Exception in _build_messages call: {e}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+            
             if not messages:
                 self.logger.warning("No messages to send to LLM")
                 return {"route": "finish", "error": "No conversation context"}
             
             # Call LLM service
-            response = llm_service.call_llm(messages)
+            self.logger.error("CRITICAL: About to call llm_service.call_llm in AgentNode.process!")
+            response = self.llm_service.call_llm(messages)
             self.logger.info(f"LLM response received: {response[:100]}...")
+            self.logger.info(f"LLM response type: {type(response)}")
+            self.logger.info(f"LLM response length: {len(response) if response else 0}")
             
             # Extract actions from response
+            self.logger.info(f"About to extract actions from response: {response[:200]}...")
             actions = extract_all_actions_from_json(response or "")
+            self.logger.info(f"Extracted actions: {actions}")
             
             # Validate actions
             valid = (
@@ -91,26 +115,30 @@ class AgentNode(SimpleNode):
                 all(isinstance(a, dict) and "action" in a for a in actions)
             )
             
+            self.logger.info(f"Actions valid: {valid}, actions count: {len(actions) if isinstance(actions, list) else 0}")
+            
             if not valid:
                 self.logger.warning("Invalid actions extracted from LLM response")
                 return {"route": "finish", "error": "Invalid LLM response format"}
             
             # Store actions in shared state
-            shared["action_queue"] = actions[:]
+            shared.action_queue = actions[:]
             
             self.logger.info(f"Extracted {len(actions)} actions from LLM response")
             
             if not actions:
+                self.logger.info("No actions found, returning finish")
                 return {"route": "finish"}
             
+            self.logger.info("Actions found, returning default route")
             return {"route": "default"}
             
         except LLMError as e:
             self.logger.error(f"LLM service error: {e}")
-            return {"route": "finish", "error": str(e)}
+            raise e
         except Exception as e:
             self.logger.error(f"Unexpected error in AgentNode: {e}")
-            return {"route": "finish", "error": str(e)}
+            raise LLMError(f"Unexpected error in agent processing: {e}")
     
     def _build_messages(self, shared: SharedState) -> List[Dict[str, str]]:
         """
@@ -122,117 +150,41 @@ class AgentNode(SimpleNode):
         Returns:
             List of message dictionaries
         """
-        messages = []
+        self.logger.info("_build_messages called")
         
-        # Get email and user info
-        email = shared.get("email", {})
-        sender = email.get("from") or shared.get("sender", "unknown")
-        sender_email = self._extract_email(sender).strip().lower() if sender else "unknown"
-        
-        # Build system prompt
-        system_prompt = self._build_system_prompt(shared, sender_email)
-        messages.append({"role": "system", "content": system_prompt})
-        
-        # Add conversation history
-        conversation = shared.get("conversation", [])
-        if conversation:
-            for msg in conversation:
-                messages.append(msg)
-        
-        # Add current email if not already in conversation
-        if email and email.get("body"):
-            current_message = {
-                "role": "user",
-                "content": email.get("body", "")
-            }
-            messages.append(current_message)
-        
-        return messages
-    
-    def _build_system_prompt(self, shared: SharedState, sender_email: str) -> str:
-        """
-        Build system prompt for LLM.
-        
-        Args:
-            shared: Shared state containing context
-            sender_email: Email of the sender
-            
-        Returns:
-            System prompt string
-        """
-        # Get user personality from database
-        personality_instruction = ""
         try:
-            from ..web.routes import get_user_by_email
-            user = get_user_by_email(sender_email)
-            if user and user.get("personality"):
-                personality_instruction = f"\n\nIMPORTANT: When responding, you must behave as follows: {user['personality']}"
+            messages = []
+            
+            # Get email and user info
+            email = shared.email or {}
+            sender = email.get("from") or shared.user or "unknown"
+            sender_email = extract_email(sender).strip().lower() if sender else "unknown"
+            
+            self.logger.info(f"Extracted sender_email: {sender_email}")
+            
+            # Use the new utility function
+            system_prompt = build_system_prompt(shared, sender_email)
+            messages.append({"role": "system", "content": system_prompt})
+            
+            # Add conversation history
+            conversation = shared.conversation or []
+            if conversation:
+                for msg in conversation:
+                    messages.append(msg)
+            
+            # Add current email if not already in conversation
+            if email and email.get("body"):
+                current_message = {
+                    "role": "user",
+                    "content": email.get("body", "")
+                }
+                messages.append(current_message)
+            
+            self.logger.info(f"_build_messages completed, returning {len(messages)} messages")
+            return messages
+            
         except Exception as e:
-            self.logger.warning(f"Could not get user personality for {sender_email}: {e}")
-        
-        base_prompt = f"""You are an email assistant. The sender of the current email is: {sender_email}{personality_instruction}
-
-Your job is to answer the user's email above as helpfully and conversationally as possible.
-
-You can choose one of these actions:
-- send: Reply to the sender or to a specified recipient.
-- generate: Generate content (sound, image, or document).
-  - type: sound, image, or document
-  - prompt: a description of what to generate
-  - duration: (optional, in seconds)
-- investigate: Research a topic or answer a question using web search.
-- finish: End the conversation and trigger a guaranteed response to the sender.
-
-**IMPORTANT:**
-If the user requests content to be sent (e.g., "generate a song and send it to X"), ALWAYS output a list of actions:
-1. First, a 'generate' action to create the content.
-2. Then, a 'send' action to send the generated file as an attachment.
-3. When you are done, always call 'finish' as the last action.
-
-Reply ONLY in JSON format, and nothing else. Do NOT add any text before or after the JSON block.
-
-Example:
-```json
-[
-  {{
-    "action": "generate",
-    "parameters": {{
-      "type": "sound",
-      "prompt": "A 2-minute song in the style of Daft Punk",
-      "duration": 120
-    }}
-  }},
-  {{
-    "action": "send",
-    "parameters": {{
-      "to": "user@example.com",
-      "body": "Here is your requested song!",
-      "attachment": "<generated file>"
-    }}
-  }},
-  {{
-    "action": "finish",
-    "parameters": {{}}
-  }}
-]
-```"""
-        
-        # Add context-specific information
-        if shared.get("last_error"):
-            base_prompt += f"\n\nNote: The last operation failed with the following error: {shared['last_error']}"
-        
-        if shared.get("generated_file_path"):
-            base_prompt += f"\n\nThe last generated file is: {shared['generated_file_path']}. If you want to send it, use this exact filename as the attachment."
-        
-        return base_prompt
-    
-    def _extract_email(self, sender: str) -> str:
-        """Extract email address from sender string."""
-        import re
-        # Use raw string and single backslash for dot
-        match = re.search(r'<([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>', sender)
-        if match:
-            return match.group(1)
-        # fallback: if sender is just the email
-        match = re.search(r'([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})', sender)
-        return match.group(1) if match else sender 
+            self.logger.error(f"Error in _build_messages: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            raise 

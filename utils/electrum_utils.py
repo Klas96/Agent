@@ -2,26 +2,29 @@
 Electrum utilities for Bitcoin wallet integration.
 """
 
-import os
 import requests
-import json
-import logging
-from typing import Optional, Dict, Any
+import subprocess
+import time
+from typing import Dict, Any, Optional, List
+from src.pocketflow.config.settings import get_settings
+from src.pocketflow.utils.errors import BitcoinError
+from src.pocketflow.utils.logging import get_logger
 
 # Set up simple logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("ElectrumUtils")
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') # This line is removed as per the new_code
+logger = get_logger("electrum_utils")
 
 def get_electrum_rpc_config() -> Dict[str, Any]:
-    """Get Electrum RPC configuration from environment variables."""
+    """Get Electrum RPC configuration from centralized settings."""
+    settings = get_settings()
     return {
-        "host": os.environ.get("ELECTRUM_HOST", "localhost"),
-        "port": int(os.environ.get("ELECTRUM_PORT", "7777")),  # Fixed default port
-        "username": os.environ.get("ELECTRUM_USERNAME", "myuser"),
-        "password": os.environ.get("ELECTRUM_PASSWORD", "mypass"),
-        "rpc_port": int(os.environ.get("ELECTRUM_RPCPORT", "7777")),
-        "rpc_user": os.environ.get("ELECTRUM_RPCUSER", "myuser"),
-        "rpc_password": os.environ.get("ELECTRUM_RPCPASSWORD", "mypass")
+        "host": settings.ELECTRUM_HOST,
+        "port": settings.ELECTRUM_PORT,
+        "username": settings.ELECTRUM_USERNAME or "myuser",
+        "password": settings.ELECTRUM_PASSWORD or "mypass",
+        "rpc_port": settings.ELECTRUM_PORT,  # Use the same port for RPC
+        "rpc_user": settings.ELECTRUM_USERNAME or "myuser",
+        "rpc_password": settings.ELECTRUM_PASSWORD or "mypass"
     }
 
 def call_electrum_rpc(method: str, params: list = None) -> Optional[Dict[str, Any]]:
@@ -62,13 +65,13 @@ def call_electrum_rpc(method: str, params: list = None) -> Optional[Dict[str, An
         
         if "error" in result and result["error"] is not None:
             logger.error(f"Electrum RPC error: {result['error']}")
-            return None
+            raise BitcoinError(f"Electrum RPC error: {result['error']}")
             
         return result.get("result")
         
     except Exception as e:
         logger.error(f"Failed to call Electrum RPC {method}: {e}")
-        return None
+        raise BitcoinError(f"Failed to call Electrum RPC {method}: {e}")
 
 def get_new_btc_address() -> Optional[str]:
     """
@@ -101,11 +104,11 @@ def get_new_btc_address() -> Optional[str]:
             return address
         else:
             logger.error(f"Failed to generate BTC address: {result.stderr}")
-            return None
+            raise BitcoinError(f"Failed to generate BTC address: {result.stderr}")
             
     except Exception as e:
         logger.error(f"Failed to generate BTC address: {e}")
-        return None
+        raise BitcoinError(f"Failed to generate BTC address: {e}")
 
 def get_btc_balance() -> Optional[float]:
     """
@@ -124,11 +127,11 @@ def get_btc_balance() -> Optional[float]:
         return balance_btc
     else:
         logger.error("Failed to get BTC balance")
-        return None
+        raise BitcoinError("Failed to get BTC balance")
 
 def get_btc_usd_price() -> Optional[float]:
     """
-    Get current BTC/USD price from a public API.
+    Get current BTC/USD price from BitcoinService or fallback to API.
     
     Returns:
         BTC price in USD or None if failed
@@ -136,7 +139,18 @@ def get_btc_usd_price() -> Optional[float]:
     logger.info("Getting BTC/USD price")
     
     try:
-        # Use CoinGecko API (free, no API key required)
+        # Try to use BitcoinService first
+        try:
+            from src.pocketflow.services import bitcoin_service
+            price = bitcoin_service.get_btc_price()
+            logger.info(f"Current BTC price from service: ${price}")
+            return price
+        except ImportError:
+            logger.debug("BitcoinService not available, using direct API")
+        except Exception as e:
+            logger.debug(f"BitcoinService failed: {e}, using direct API")
+        
+        # Fallback to direct API call
         response = requests.get(
             "https://api.coingecko.com/api/v3/simple/price",
             params={
@@ -150,70 +164,97 @@ def get_btc_usd_price() -> Optional[float]:
         
         price = data.get("bitcoin", {}).get("usd")
         if price:
-            logger.info(f"Current BTC price: ${price}")
+            logger.info(f"Current BTC price from API: ${price}")
             return float(price)
         else:
             logger.error("Failed to parse BTC price from API response")
-            return None
+            raise BitcoinError("Failed to parse BTC price from API response")
             
     except Exception as e:
         logger.error(f"Failed to get BTC/USD price: {e}")
-        return None
+        raise BitcoinError(f"Failed to get BTC/USD price: {e}")
 
 def check_address_in_wallet(address: str) -> bool:
     """
-    Check if a Bitcoin address belongs to the wallet.
+    Check if a Bitcoin address exists in the wallet.
     
     Args:
         address: Bitcoin address to check
         
     Returns:
-        True if address is in wallet, False otherwise
+        True if address exists in wallet, False otherwise
     """
-    logger.info(f"Checking if address {address} is in wallet")
+    logger.info(f"Checking if address {address} exists in wallet")
     
-    result = call_electrum_rpc("is_mine", [address])
-    if result is not None:
-        is_mine = bool(result)
-        logger.info(f"Address {address} {'IS' if is_mine else 'is NOT'} in wallet")
-        return is_mine
-    else:
-        logger.error(f"Failed to check address {address}")
+    try:
+        # Get all wallet addresses
+        addresses = get_wallet_addresses()
+        if addresses:
+            exists = address in addresses
+            logger.info(f"Address {address} exists in wallet: {exists}")
+            return exists
+        else:
+            logger.error("Failed to get wallet addresses")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to check address in wallet: {e}")
         return False
 
 def get_wallet_addresses() -> Optional[list]:
     """
-    Get all addresses in the wallet.
+    Get all addresses in the Electrum wallet.
     
     Returns:
         List of addresses or None if failed
     """
     logger.info("Getting all wallet addresses")
     
-    result = call_electrum_rpc("listaddresses")
-    if result:
-        addresses = result
-        logger.info(f"Found {len(addresses)} addresses in wallet")
-        return addresses
-    else:
-        logger.error("Failed to get wallet addresses")
-        return None
+    try:
+        # Use electrum command to list addresses
+        import subprocess
+        
+        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
+        
+        result = subprocess.run([
+            "/opt/pocketflow/venv/bin/electrum",
+            "--wallet", wallet_path,
+            "listaddresses"
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            addresses = result.stdout.strip().split('\n')
+            # Filter out empty lines
+            addresses = [addr for addr in addresses if addr.strip()]
+            logger.info(f"Found {len(addresses)} addresses in wallet")
+            return addresses
+        else:
+            logger.error(f"Failed to get wallet addresses: {result.stderr}")
+            raise BitcoinError(f"Failed to get wallet addresses: {result.stderr}")
+            
+    except Exception as e:
+        logger.error(f"Failed to get wallet addresses: {e}")
+        raise BitcoinError(f"Failed to get wallet addresses: {e}")
 
 def is_electrum_running() -> bool:
     """
-    Check if Electrum daemon is running and accessible.
+    Check if Electrum daemon is running.
     
     Returns:
-        True if Electrum is running, False otherwise
+        True if running, False otherwise
     """
+    logger.info("Checking if Electrum daemon is running")
+    
     try:
-        result = call_electrum_rpc("version")
+        # Try to connect to Electrum daemon
+        result = call_electrum_rpc("getinfo")
         if result:
-            logger.info(f"Electrum daemon is running, version: {result}")
+            logger.info("Electrum daemon is running")
             return True
         else:
             logger.warning("Electrum daemon is not responding")
             return False
+            
     except Exception as e:
-        logger.error(f"Failed to check Electrum status: {e}")
+        logger.error(f"Failed to check Electrum daemon status: {e}")
         return False

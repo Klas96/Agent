@@ -243,8 +243,4 @@ class EmailService:
         
         if self._imap_connection:
             self._imap_connection.close()
-            self._imap_connection = None
-
-
-# Global email service instance
-email_service = EmailService() 
+            self._imap_connection = None 

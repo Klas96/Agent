@@ -265,8 +265,4 @@ class BitcoinService:
             "total_addresses": len(self._addresses),
             "pending_payments": len(self._pending_payments),
             "service_status": "operational"
-        }
-
-
-# Global Bitcoin service instance
-bitcoin_service = BitcoinService() 
+        } 

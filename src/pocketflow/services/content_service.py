@@ -304,8 +304,4 @@ The document generation service is designed to create content based on user prom
             return file_info
             
         except Exception as e:
-            return {"error": str(e)}
-
-
-# Global content service instance
-content_service = ContentService() 
+            return {"error": str(e)} 

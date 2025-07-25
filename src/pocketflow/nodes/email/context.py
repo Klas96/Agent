@@ -29,17 +29,19 @@ class ConversationContextNode(SimpleNode):
             Processing result with routing information
         """
         try:
-            email = shared.get("email")
+            email = shared.email
             if not email:
                 self.logger.info("No email found, skipping conversation context")
-                shared["conversation"] = None
+                shared.conversation = None
                 return {"route": "no_context"}
             
             # Get thread ID for conversation tracking
             thread_id = email.get("thread_id", email.get("id", "default"))
             
             # Initialize conversations if not present
-            conversations = shared.setdefault("conversations", {})
+            if not hasattr(shared, 'conversations') or shared.conversations is None:
+                shared.conversations = {}
+            conversations = shared.conversations
             history = conversations.get(thread_id, [])
             
             # Add the new user message to the history
@@ -50,8 +52,8 @@ class ConversationContextNode(SimpleNode):
             history.append(user_message)
             
             # Update conversation in shared state
-            shared["conversation"] = history
-            shared["conversations"][thread_id] = history
+            shared.conversation = history
+            shared.conversations[thread_id] = history
             
             self.logger.info(f"Updated conversation context for thread {thread_id}, history length: {len(history)}")
             
@@ -59,5 +61,5 @@ class ConversationContextNode(SimpleNode):
             
         except Exception as e:
             self.logger.error(f"Error in ConversationContextNode: {e}")
-            shared["conversation"] = None
+            shared.conversation = None
             return {"route": "no_context", "error": str(e)} 

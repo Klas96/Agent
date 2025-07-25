@@ -56,6 +56,7 @@ print_status "Copying source files..."
 cp -r src/* /opt/pocketflow/src/
 cp main.py /opt/pocketflow/
 cp control_panel.py /opt/pocketflow/
+cp flow.py /opt/pocketflow/
 cp requirements.txt /opt/pocketflow/
 
 # Set ownership

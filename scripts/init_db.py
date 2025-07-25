@@ -1,7 +1,7 @@
 import os
-from utils.user_db import init_db, DB_PATH
+from src.pocketflow.services import database_service
 
 if __name__ == "__main__":
-    print("Initializing DB at:", os.path.abspath(DB_PATH))
-    init_db()
-    print("Database schema initialized.") 
+    print("Initializing database...")
+    # The database is automatically initialized when DatabaseService is created
+    print(f"Database schema initialized at: {database_service.db_path}") 

@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 from ..core.node import SimpleNode
 from ..core.types import SharedState, FlowType
 from ..utils.logging import get_logger
-from ..services.database_service import database_service
+from ..services import database_service
 
 
 class UserStatusCheckNode(SimpleNode):

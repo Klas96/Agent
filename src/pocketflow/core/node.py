@@ -1,28 +1,30 @@
 """
-Base node classes for PocketFlow.
+Core node abstractions for PocketFlow.
 
-This module provides the foundation for all nodes in the system.
+This module defines the base Node class and related abstractions.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, List
 import logging
+from abc import ABC, abstractmethod
+from typing import Any, Optional, Dict
 from .types import SharedState, NodeResult
+from ..utils.logging import get_logger
+from ..utils.errors import NodeError
 
 
 class Node(ABC):
     """
     Base class for all nodes in PocketFlow.
     
-    A node represents a single step in a flow. Each node has three phases:
-    1. prep: Prepare data for execution
+    Each node follows a three-phase execution pattern:
+    1. prep: Prepare data from shared state
     2. exec: Execute the main logic
     3. post: Post-process results and update shared state
     """
     
     def __init__(self, name: Optional[str] = None):
         self.name = name or self.__class__.__name__
-        self.logger = logging.getLogger(f"pocketflow.node.{self.name}")
+        self.logger = get_logger(f"node.{self.name}")
     
     def run(self, shared: SharedState) -> NodeResult:
         """
@@ -64,10 +66,36 @@ class Node(ABC):
             
         except Exception as e:
             self.logger.error(f"Error in node {self.name}: {str(e)}", exc_info=True)
+            # Try fallback if available
+            try:
+                fallback_result = self.exec_fallback(prep_result, e)
+                if fallback_result is not None:
+                    return NodeResult(
+                        success=True,
+                        data=fallback_result,
+                        metadata={"fallback": True, "original_error": str(e)}
+                    )
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback also failed for node {self.name}: {str(fallback_error)}")
+            
             return NodeResult(
                 success=False,
                 error=str(e)
             )
+    
+    def exec_fallback(self, prep_result: Any, exc: Exception) -> Optional[Any]:
+        """
+        Fallback method called when exec() fails.
+        
+        Args:
+            prep_result: Result from the prep phase
+            exc: The exception that caused the failure
+            
+        Returns:
+            Fallback result or None if no fallback is available
+        """
+        # Default implementation: re-raise the exception
+        raise exc
     
     @abstractmethod
     def prep(self, shared: SharedState) -> Any:
@@ -128,8 +156,11 @@ class SimpleNode(Node):
     
     def post(self, shared: SharedState, prep_result: SharedState, exec_result: Any) -> str:
         """Update shared state and return routing decision."""
-        if exec_result is not None:
-            shared.update(exec_result)
+        if exec_result is not None and isinstance(exec_result, dict):
+            # Update shared state attributes based on exec_result
+            for key, value in exec_result.items():
+                if hasattr(shared, key):
+                    setattr(shared, key, value)
         return "default"
     
     @abstractmethod

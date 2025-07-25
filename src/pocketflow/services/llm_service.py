@@ -66,19 +66,72 @@ class LLMService:
     def _call_openai(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Call OpenAI API."""
         try:
-            response = openai.ChatCompletion.create(
+            from openai import OpenAI
+            client = OpenAI(api_key=self.settings.OPENAI_API_KEY)
+            response = client.chat.completions.create(
                 model=self.settings.LLM_MODEL,
                 messages=messages,
                 max_tokens=kwargs.get('max_tokens', self.settings.LLM_MAX_TOKENS),
-                temperature=kwargs.get('temperature', self.settings.LLM_TEMPERATURE),
-                timeout=kwargs.get('timeout', self.settings.LLM_TIMEOUT)
+                temperature=kwargs.get('temperature', self.settings.LLM_TEMPERATURE)
             )
             return response.choices[0].message.content
             
         except Exception as e:
-            if "rate limit" in str(e).lower():
+            error_str = str(e).lower()
+            if "quota" in error_str or "429" in error_str or "insufficient_quota" in error_str:
+                self.logger.warning("OpenAI quota exceeded, falling back to local response")
+                return self._get_local_fallback_response(messages)
+            elif "rate limit" in error_str:
                 raise RetryableError(f"OpenAI rate limit: {e}")
-            raise LLMError(f"OpenAI API error: {e}")
+            else:
+                raise LLMError(f"OpenAI API error: {e}")
+    
+    def _call_local_llm(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Call local Ollama LLM."""
+        try:
+            import requests
+            import json
+            
+            # Convert messages to a single prompt
+            prompt = ""
+            for msg in messages:
+                role = msg.get('role', '')
+                content = msg.get('content', '')
+                if role == 'system':
+                    prompt += f"System: {content}\n\n"
+                elif role == 'user':
+                    prompt += f"User: {content}\n\n"
+                elif role == 'assistant':
+                    prompt += f"Assistant: {content}\n\n"
+            
+            # Ollama API endpoint
+            ollama_url = "http://localhost:11434/api/generate"
+            
+            # Prepare the request data
+            data = {
+                "model": "llama3:latest",  # Use the available model
+                "prompt": prompt,
+                "stream": False
+            }
+            
+            self.logger.info(f"Calling local Ollama LLM at {ollama_url}")
+            response = requests.post(ollama_url, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('response', 'No response from local LLM')
+            else:
+                self.logger.warning(f"Ollama API returned status {response.status_code}")
+                raise Exception(f"Ollama API error: {response.status_code}")
+                
+        except Exception as e:
+            self.logger.error(f"Local LLM call failed: {e}")
+            raise LLMError(f"Local LLM call failed: {e}")
+
+    def _get_local_fallback_response(self, messages: List[Dict[str, str]]) -> str:
+        """Call local Ollama LLM when external LLM is unavailable."""
+        self.logger.info("Calling local Ollama LLM as fallback")
+        return self._call_local_llm(messages)
     
     def _call_google(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Call Google Generative AI API."""
@@ -266,8 +319,4 @@ Example:
         if context.get("conversation"):
             base_prompt += f"\n\nConversation history: {context['conversation']}"
         
-        return base_prompt
-
-
-# Global LLM service instance
-llm_service = LLMService() 
+        return base_prompt 

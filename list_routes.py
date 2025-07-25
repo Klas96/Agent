@@ -1,5 +1,12 @@
-from control_panel import app
+from src.pocketflow.web.app import create_app
 
-with app.app_context():
-    for rule in app.url_map.iter_rules():
-        print(f"{rule.endpoint:30s} {rule.methods} {rule.rule}") 
+app = create_app()
+
+print("PocketFlow Control Panel Routes:")
+print("=" * 40)
+
+for rule in app.url_map.iter_rules():
+    methods = ','.join(rule.methods - {'HEAD', 'OPTIONS'})
+    print(f"{rule.rule:<30} {methods:<15} {rule.endpoint}")
+
+print("\nAccess the control panel at: http://localhost:5001/admin/") 

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
     LLM_MAX_TOKENS: int = Field(default=4000, env="LLM_MAX_TOKENS")
     LLM_TEMPERATURE: float = Field(default=0.7, env="LLM_TEMPERATURE")
+    LLM_TIMEOUT: int = Field(default=60, env="LLM_TIMEOUT")  # 60 seconds
     
     # Content Generation
     CONTENT_OUTPUT_DIR: str = Field(default="./generated", env="CONTENT_OUTPUT_DIR")
