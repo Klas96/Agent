@@ -14,66 +14,100 @@ from email import encoders
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+import os
+import json
 
 from ..core.types import EmailData, EmailSendRequest
-from ..config.settings import get_settings
-from ..utils.errors import EmailError, RetryableError
+from ..config.settings import Settings
+from ..utils.errors import EmailError
 from ..utils.logging import get_logger
 
 
 class EmailService:
     """Service for handling email operations."""
     
-    def __init__(self):
-        self.settings = get_settings()
-        self.logger = get_logger("EmailService")
+    def __init__(self, settings: Settings):
+        """Initialize the email service."""
+        self.settings = settings
+        self.logger = logging.getLogger(__name__)
         self._smtp_connection = None
         self._imap_connection = None
+        self.logger.info("EmailService initialized")
+
+    def _get_smtp_server(self):
+        """Get or create SMTP server connection."""
+        if self._smtp_connection is None:
+            self._smtp_connection = smtplib.SMTP(
+                self.settings.EMAIL_HOST, 
+                self.settings.EMAIL_PORT
+            )
+            if self.settings.EMAIL_USE_TLS:
+                self._smtp_connection.starttls()
+            self._smtp_connection.login(
+                self.settings.EMAIL_USERNAME, 
+                self.settings.EMAIL_PASSWORD
+            )
+        return self._smtp_connection
+
+    def _get_imap_server(self):
+        """Get or create IMAP server connection."""
+        if self._imap_connection is None:
+            self._imap_connection = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
+            self._imap_connection.login(
+                self.settings.EMAIL_USERNAME, 
+                self.settings.EMAIL_PASSWORD
+            )
+            self._imap_connection.select('INBOX')
+        return self._imap_connection
     
     def fetch_unread_emails(self) -> List[EmailData]:
-        """
-        Fetch unread emails from the configured email account.
-        
-        Returns:
-            List of EmailData objects representing unread emails
-            
-        Raises:
-            EmailError: If email fetching fails
-        """
+        """Fetch unread emails from the inbox."""
         imap_server = None
         try:
-            self.logger.info("Fetching unread emails...")
-            
             # Create a fresh IMAP connection for this operation
             imap_server = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
-            imap_server.login(self.settings.EMAIL_USERNAME, self.settings.EMAIL_PASSWORD)
+            imap_server.login(
+                self.settings.EMAIL_USERNAME, 
+                self.settings.EMAIL_PASSWORD
+            )
             imap_server.select('INBOX')
             
-            # Search for unread emails
-            _, message_numbers = imap_server.search(None, 'UNSEEN')
-            
             emails = []
-            for num in message_numbers[0].split():
-                try:
-                    _, msg_data = imap_server.fetch(num, '(RFC822)')
-                    email_body = msg_data[0][1]
-                    email_message = email.message_from_bytes(email_body)
-                    
-                    # Extract email data
-                    email_data = self._parse_email_message(email_message, num.decode())
-                    if email_data:
-                        emails.append(email_data)
-                        
-                except Exception as e:
-                    self.logger.warning(f"Failed to parse email {num}: {e}")
-                    continue
             
-            self.logger.info(f"Fetched {len(emails)} unread emails")
+            self.logger.info("Fetching unread emails...")
+            
+            # Search for unread emails only
+            _, message_numbers = imap_server.search(None, 'UNSEEN')
+            if message_numbers[0]:
+                self.logger.info(f"Found {len(message_numbers[0].split())} unread emails")
+                for num in message_numbers[0].split():
+                    email_id = num.decode()
+                    
+                    try:
+                        _, msg_data = imap_server.fetch(num, '(RFC822)')
+                        email_body = msg_data[0][1]
+                        email_message = email.message_from_bytes(email_body)
+                        
+                        # Extract email data
+                        email_data = self._parse_email_message(email_message, email_id)
+                        if email_data:
+                            emails.append(email_data)
+                            # Mark as read immediately to prevent reprocessing
+                            self.mark_as_read(email_id)
+                            self.logger.info(f"Added unread email {email_id} to processing queue and marked as read")
+                            
+                    except Exception as e:
+                        self.logger.warning(f"Failed to parse email {num}: {e}")
+                        continue
+            else:
+                self.logger.info("No unread emails found")
+            
+            self.logger.info(f"Fetched {len(emails)} emails total")
             return emails
             
         except Exception as e:
             self.logger.error(f"Failed to fetch emails: {e}")
-            raise EmailError(f"Email fetching failed: {e}")
+            return []
         finally:
             if imap_server:
                 try:
@@ -94,6 +128,7 @@ class EmailService:
         Raises:
             EmailError: If email sending fails
         """
+        smtp_server = None
         try:
             self.logger.info(f"Sending email to: {request.to}")
             
@@ -105,21 +140,45 @@ class EmailService:
                 msg['Cc'] = request.cc
             msg['Subject'] = request.subject
             
+            # Add threading headers for proper email threading
+            if request.in_reply_to:
+                msg['In-Reply-To'] = request.in_reply_to
+                self.logger.info(f"Setting In-Reply-To header: {request.in_reply_to}")
+            if request.references:
+                msg['References'] = request.references
+                self.logger.info(f"Setting References header: {request.references}")
+            
+            # Add Message-ID for proper threading
+            import uuid
+            message_id = f"<pocketflow-{uuid.uuid4()}@mail.gmail.com>"
+            msg['Message-ID'] = message_id
+            self.logger.info(f"Setting Message-ID header: {message_id}")
+            
             # Add body
-            msg.attach(MIMEText(request.body, 'plain'))
+            msg.attach(MIMEText(request.body, 'plain', 'utf-8'))
             
             # Add attachment if specified
             if request.attachment:
                 self._add_attachment(msg, request.attachment)
             
+            # Create a fresh SMTP connection for this operation
+            smtp_server = smtplib.SMTP(
+                self.settings.EMAIL_HOST, 
+                self.settings.EMAIL_PORT
+            )
+            if self.settings.EMAIL_USE_TLS:
+                smtp_server.starttls()
+            smtp_server.login(
+                self.settings.EMAIL_USERNAME, 
+                self.settings.EMAIL_PASSWORD
+            )
+            
             # Send email
-            smtp_server = self._get_smtp_server()
             recipients = [request.to]
             if request.cc:
                 recipients.extend(request.cc.split(','))
             
             smtp_server.send_message(msg)
-            smtp_server.quit()
             
             self.logger.info(f"Email sent successfully to {request.to}")
             return True
@@ -127,34 +186,32 @@ class EmailService:
         except Exception as e:
             self.logger.error(f"Failed to send email: {e}")
             raise EmailError(f"Email sending failed: {e}")
+        finally:
+            if smtp_server:
+                try:
+                    smtp_server.quit()
+                except Exception as e:
+                    self.logger.warning(f"Error closing SMTP connection: {e}")
     
     def mark_as_read(self, email_id: str) -> bool:
-        """
-        Mark an email as read.
-        
-        Args:
-            email_id: ID of the email to mark as read
-            
-        Returns:
-            True if successfully marked as read
-        """
+        """Mark an email as read by setting the \Seen flag."""
         imap_server = None
         try:
-            self.logger.info(f"Marking email {email_id} as read")
-            
             # Create a fresh IMAP connection for this operation
             imap_server = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
-            imap_server.login(self.settings.EMAIL_USERNAME, self.settings.EMAIL_PASSWORD)
+            imap_server.login(
+                self.settings.EMAIL_USERNAME, 
+                self.settings.EMAIL_PASSWORD
+            )
             imap_server.select('INBOX')
             
-            # Mark as read by removing UNSEEN flag
+            # Set the \Seen flag
             imap_server.store(email_id, '+FLAGS', '\\Seen')
-            
-            self.logger.info(f"Email {email_id} marked as read")
+            self.logger.info(f"Marked email {email_id} as read")
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to mark email as read: {e}")
+            self.logger.error(f"Failed to mark email {email_id} as read: {e}")
             return False
         finally:
             if imap_server:
@@ -191,12 +248,15 @@ class EmailService:
             subject = email_message.get('Subject', '')
             from_header = email_message.get('From', '')
             to_header = email_message.get('To', '')
+            message_id = email_message.get('Message-ID', '')
+            in_reply_to = email_message.get('In-Reply-To', '')
+            references = email_message.get('References', '')
             
             # Extract body
             body = self._get_email_body(email_message)
             
             # Extract thread ID (using Message-ID as fallback)
-            thread_id = email_message.get('In-Reply-To') or email_message.get('Message-ID', email_id)
+            thread_id = in_reply_to or message_id or email_id
             
             return EmailData(
                 id=email_id,
@@ -205,7 +265,10 @@ class EmailService:
                 to=to_header,
                 subject=subject,
                 body=body,
-                received_at=datetime.now()  # TODO: Parse actual received date
+                received_at=datetime.now(),  # TODO: Parse actual received date
+                message_id=message_id if message_id else None,
+                in_reply_to=in_reply_to if in_reply_to else None,
+                references=references if references else None
             )
             
         except Exception as e:

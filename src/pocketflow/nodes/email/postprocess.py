@@ -5,60 +5,59 @@ This module contains the PostprocessEmailNode for final email processing.
 """
 
 from typing import Dict, Any, Optional
-from ...core.node import SimpleNode
-from ...core.types import SharedState
+from ...core.node import Node
+from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
-from ...utils.errors import EmailError
-from ...services import email_service
-from ...utils.email_utils import extract_email
+from ...services.email_service import EmailService
+from ...config.settings import get_settings
 
+logger = get_logger("PostProcessNode")
 
-class PostProcessNode(SimpleNode):
-    """Node for post-processing and sending email responses."""
+class PostProcessNode(Node):
+    """Node for final email processing and sending responses."""
     
-    def __init__(self, name: str = "post_process"):
-        super().__init__(name)
-        self.logger = get_logger("PostProcessNode")
+    def prep(self, shared: SharedState):
+        """Prepare by getting email service and extracting response data."""
+        settings = get_settings()
+        email_service = EmailService(settings)
+        
+        # Extract response data from shared state
+        result = {}
+        if hasattr(shared, 'email') and shared.email:
+            result.update(shared.email)
+        
+        # Get reply body from shared state
+        if hasattr(shared, 'reply_body') and shared.reply_body:
+            result['reply_body'] = shared.reply_body
+        
+        # Get attachment from shared state
+        if hasattr(shared, 'attachment') and shared.attachment:
+            result['attachment'] = shared.attachment
+        
+        return email_service, result
     
-    def process(self, shared: SharedState) -> Optional[Dict[str, Any]]:
-        """Process and send email response."""
-        self.logger.info(f"[DEBUG] PostProcessNode.prep called with shared: {shared}")
-        
-        if shared.get("sender_have_gotten_response") is True:
-            self.logger.info("[DEBUG] PostProcessNode.prep: sender_have_gotten_response is True, skipping.")
+    def exec(self, prep_result):
+        """Execute by sending the final response email."""
+        if not prep_result:
             return None
             
-        email = shared.get("email")
-        if not email:
-            self.logger.info("[DEBUG] PostProcessNode.prep: No email found, skipping.")
-            return None
-            
-        user_email = shared.get("user", "")
-        if not user_email:
-            user_email = extract_email(email.get("from", ""))
-            
-        result = dict(email)
-        result["out_of_tokens"] = shared.get("out_of_tokens", False)
-        result["btc_address"] = shared.get("btc_address")
-        result["user_email"] = user_email
-        result["reply_body"] = shared.get("reply_body", "")
-        result["attachment"] = shared.get("attachment")
+        email_service, result = prep_result
         
-        self.logger.info(f"[DEBUG] PostProcessNode.exec called with data: {result}")
-        
-        if result is None:
-            self.logger.info("[DEBUG] PostProcessNode.exec: No data, returning None.")
-            return None
-            
-        # Use the sender's email as the recipient for the reply
-        recipient = result.get("user_email") or result.get("from")
+        # Determine recipient
+        recipient = result.get("from")
         if not recipient:
-            self.logger.error("[PostProcessNode] No recipient email found!")
+            logger.error("No recipient email address found")
             return None
-            
+        
         # Set up proper reply headers
-        in_reply_to = result.get("message_id") or result.get("in_reply_to")
-        references = result.get("message_id") or result.get("references")
+        in_reply_to = result.get("in_reply_to") or result.get("message_id")
+        references = result.get("references") or result.get("message_id")
+        
+        # Debug logging for threading headers
+        logger.info(f"Setting threading headers - in_reply_to: {in_reply_to}, references: {references}")
+        logger.info(f"Original email message_id: {result.get('message_id')}")
+        logger.info(f"Original email in_reply_to: {result.get('in_reply_to')}")
+        logger.info(f"Original email references: {result.get('references')}")
         
         try:
             # Use the email service instead of direct function call
@@ -71,10 +70,19 @@ class PostProcessNode(SimpleNode):
                 references=references
             )
             
+            # Send the email
             success = email_service.send_email(send_request)
-            self.logger.info(f"[DEBUG] PostProcessNode.post called with exec_res: {success}")
             return success
             
         except Exception as e:
-            self.logger.error(f"[PostProcessNode] Error sending email: {e}")
-            return None 
+            logger.error(f"Failed to send email: {e}")
+            return False
+    
+    def post(self, shared: SharedState, prep_res, exec_res):
+        """Post-process by logging the result."""
+        if exec_res:
+            logger.info("Final response email sent successfully")
+            return "default"
+        else:
+            logger.error("Failed to send final response email")
+            return "error" 

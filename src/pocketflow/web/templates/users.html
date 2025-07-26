@@ -21,9 +21,8 @@
                     <tr>
                         <th>Email</th>
                         <th>Name</th>
+                        <th>Personality</th>
                         <th>Tokens</th>
-                        <th>Created</th>
-                        <th>Updated</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -39,12 +38,19 @@
                                 {{ user.name or 'Not set' }}
                             </td>
                             <td>
+                                {% if user.personality %}
+                                    <span class="text-muted" title="{{ user.personality }}">
+                                        {{ user.personality[:50] }}{% if user.personality|length > 50 %}...{% endif %}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Not set</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 <span class="badge bg-{% if user.tokens > 0 %}success{% else %}danger{% endif %}">
                                     {{ user.tokens }} tokens
                                 </span>
                             </td>
-                            <td>{{ user.created_at }}</td>
-                            <td>{{ user.updated_at }}</td>
                             <td>
                                 {% if user.tokens > 0 %}
                                     <span class="badge bg-success">Active</span>
@@ -72,7 +78,7 @@
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted">
+                            <td colspan="6" class="text-center text-muted">
                                 <i class="fas fa-info-circle"></i> No users found
                             </td>
                         </tr>
@@ -101,6 +107,11 @@
                         <label for="editUserName" class="form-label">Name</label>
                         <input type="text" class="form-control" id="editUserName" placeholder="User's full name">
                         <div class="form-text">The user's display name</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editUserPersonality" class="form-label">Personality</label>
+                        <textarea class="form-control" id="editUserPersonality" rows="3" placeholder="User's personality description"></textarea>
+                        <div class="form-text">How the AI should behave when interacting with this user</div>
                     </div>
                     <div class="mb-3">
                         <label for="editUserTokens" class="form-label">Tokens</label>
@@ -156,13 +167,24 @@ function editUser(email, tokens) {
     currentEditEmail = email;
     $('#editUserEmail').val(email);
     $('#editUserName').val(''); // Clear name field
+    $('#editUserPersonality').val(''); // Clear personality field
     $('#editUserTokens').val(tokens);
+    
+    // Load existing user data
+    $.get(`/admin/api/users/${encodeURIComponent(email)}`, function(data) {
+        if (data.success && data.user) {
+            $('#editUserName').val(data.user.name || '');
+            $('#editUserPersonality').val(data.user.personality || '');
+        }
+    });
+    
     $('#editUserModal').modal('show');
 }
 
 function saveUserEdit() {
     const email = $('#editUserEmail').val();
     const name = $('#editUserName').val();
+    const personality = $('#editUserPersonality').val();
     const tokens = parseInt($('#editUserTokens').val());
     
     if (!tokens || tokens < 0) {
@@ -179,6 +201,7 @@ function saveUserEdit() {
         contentType: 'application/json',
         data: JSON.stringify({
             name: name,
+            personality: personality,
             tokens: tokens
         }),
         success: function(data) {

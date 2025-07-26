@@ -499,6 +499,28 @@ def api_add_user():
         logger.error(f"Error in API add user: {e}")
         return jsonify({"success": False, "error": str(e)})
 
+@admin_bp.route("/api/users/<email>", methods=["GET"])
+def api_get_user(email):
+    """Get user details by email."""
+    try:
+        user = get_user_by_email(email)
+        if user:
+            return jsonify({
+                "success": True,
+                "user": user
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "User not found"
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting user {email}: {e}")
+        return jsonify({
+            "success": False,
+            "error": "Failed to get user details"
+        }), 500
+
 @admin_bp.route("/api/users/<email>", methods=["DELETE"])
 def api_delete_user(email):
     """API endpoint for deleting users."""

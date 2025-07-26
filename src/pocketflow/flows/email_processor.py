@@ -38,7 +38,6 @@ class EmailProcessorFlow:
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
                 .set_start("fetch_email")
-                .add_end_step("send_email")
                 .add_end_step("finish")
                 # Email fetching routing
                 .add_routing("fetch_email", "no_email", "finish")
@@ -63,7 +62,7 @@ class EmailProcessorFlow:
                 .add_routing("investigate", "default", "pop_action")
                 # Email sending routing
                 .add_routing("send_email", "send_failed", "finish")
-                .add_routing("send_email", "default", "pop_action")
+                .add_routing("send_email", "default", "finish")
                 .build())
     
     def run(self, shared: SharedState) -> Dict[str, Any]:

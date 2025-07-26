@@ -60,8 +60,7 @@ class AgentNode(SimpleNode):
     def __init__(self, name: str = "agent"):
         super().__init__(name)
         self.logger = get_logger("AgentNode")
-        from ...services import llm_service
-        self.llm_service = llm_service
+        self.llm_service = LLMService()
     
     def process(self, shared: SharedState) -> Dict[str, Any]:
         """

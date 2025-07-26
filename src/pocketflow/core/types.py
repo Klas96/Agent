@@ -38,6 +38,8 @@ class SharedState(BaseModel):
     content_request: Optional[Any] = Field(default=None, description="Content generation request")
     chosen_subtype: Optional[str] = Field(default=None, description="Chosen content subtype")
     chosen_duration: Optional[int] = Field(default=None, description="Chosen content duration")
+    reply_body: Optional[str] = Field(default=None, description="Reply body content")
+    out_of_tokens: Optional[bool] = Field(default=None, description="Whether user is out of tokens")
     
     class Config:
         arbitrary_types_allowed = True
@@ -83,6 +85,9 @@ class EmailData(BaseModel):
     subject: str = Field(description="Email subject")
     body: str = Field(description="Email body")
     received_at: datetime = Field(description="When email was received")
+    message_id: Optional[str] = Field(default=None, description="Message-ID header")
+    in_reply_to: Optional[str] = Field(default=None, description="In-Reply-To header")
+    references: Optional[str] = Field(default=None, description="References header")
     
     class Config:
         populate_by_name = True
@@ -103,6 +108,8 @@ class EmailSendRequest(BaseModel):
     subject: str = Field(description="Email subject")
     body: str = Field(description="Email body")
     attachment: Optional[str] = Field(default=None, description="Attachment file path")
+    in_reply_to: Optional[str] = Field(default=None, description="Message-ID of the email being replied to")
+    references: Optional[str] = Field(default=None, description="References header for email threading")
 
 
 class InvestigationRequest(BaseModel):

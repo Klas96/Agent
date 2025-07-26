@@ -5,85 +5,86 @@ This module contains the SendEmailNode for sending email responses.
 """
 
 from typing import Dict, Any, Optional
-from ...core.node import SimpleNode
+from ...core.node import Node
 from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
-from ...utils.errors import EmailError
-from ...services import email_service
-from ...utils.email_utils import extract_email
+from ...services.email_service import EmailService
+from ...config.settings import get_settings
 
+logger = get_logger("SendEmailNode")
 
-class SendEmailNode(SimpleNode):
-    """Node for sending emails with proper threading."""
+class SendEmailNode(Node):
+    """Node for sending emails based on agent actions."""
     
-    def __init__(self, name: str = "send_email"):
-        super().__init__(name)
-        self.logger = get_logger("SendEmailNode")
-    
-    def process(self, shared: SharedState) -> Dict[str, Any]:
-        """
-        Send email based on agent action parameters.
+    def prep(self, shared: SharedState):
+        """Prepare by getting email service and extracting send parameters."""
+        settings = get_settings()
+        email_service = EmailService(settings)
         
-        Args:
-            shared: Shared state containing email context and agent action
+        # Extract send parameters from agent action
+        agent_action = shared.agent_action
+        if not agent_action or agent_action.get('action') != 'send':
+            logger.warning("No send action found in agent_action")
+            return None
             
-        Returns:
-            Processing result with routing information
-        """
-        try:
-            self.logger.info("Preparing to send email...")
-            
-            # Get agent action and parameters
-            agent_action = shared.agent_action or {}
-            params = agent_action.get("parameters", {})
-            email = shared.email or {}
-            
-            # Determine recipient
-            to = params.get("to")
-            if not to:
-                to = shared.user or extract_email(email.get("from", ""))
-            
-            # Determine subject
-            subject = params.get("subject")
-            if subject is None:
-                subject = email.get("subject", "")
-            if subject and not subject.lower().startswith("re:"):
-                subject = f"Re: {subject}"
-            
-            # Prepare email body
-            body = params.get("body", "")
-            if not body or not isinstance(body, str) or not body.strip():
-                body = "Sorry, there was an error generating your reply."
-            
-            # Add extra body content if available
-            send_body_extra = getattr(shared, 'send_body_extra', None) or ""
-            if send_body_extra:
-                body += f"\n\n{send_body_extra}"
-            
-            # Create email send request
-            send_request = EmailSendRequest(
-                to=to,
-                subject=subject,
-                body=body,
-                cc=params.get("cc"),
-                attachment=getattr(shared, 'attachment', None)
-            )
-            
-            self.logger.info(f"Sending email to: {to}, subject: {subject}")
-            
-            # Send email using email service
-            success = email_service.send_email(send_request)
-            
-            if success:
-                self.logger.info("Email sent successfully")
-                shared.sender_have_gotten_response = True
-                return {"route": "default"}
+        params = agent_action.get('parameters', {})
+        to = params.get('to')
+        subject = params.get('subject')  # Don't set default here
+        body = params.get('body', '')
+        
+        if not to:
+            logger.error("No recipient email address found")
+            return None
+        
+        # Get email data from shared state
+        email = shared.email if hasattr(shared, 'email') else {}
+        
+        # Create proper subject for replies if not provided by agent
+        if not subject:
+            original_subject = email.get('subject', '')
+            if original_subject:
+                subject = f"Re: {original_subject}"
             else:
-                raise EmailError("Email service returned failure")
-                
-        except EmailError as e:
-            self.logger.error(f"Email sending failed: {e}")
-            raise e
-        except Exception as e:
-            self.logger.error(f"Unexpected error in SendEmailNode: {e}")
-            raise EmailError(f"Unexpected error in email sending: {e}") 
+                subject = "Re: Your email"  # Fallback for empty subjects
+        
+        # Debug logging for subject
+        logger.info(f"Final subject being used: {subject}")
+        logger.info(f"Original email subject: {email.get('subject', '')}")
+        logger.info(f"Agent provided subject: {params.get('subject')}")
+            
+        return email_service, to, subject, body, params, email
+    
+    def exec(self, prep_result):
+        """Execute by sending the email."""
+        if not prep_result:
+            return None
+            
+        email_service, to, subject, body, params, email = prep_result
+        
+        # Set up proper reply headers for email threading
+        in_reply_to = email.get("in_reply_to") or email.get("message_id")
+        references = email.get("references") or email.get("message_id")
+        
+        # Create email send request
+        send_request = EmailSendRequest(
+            to=to,
+            subject=subject,
+            body=body,
+            cc=params.get("cc"),
+            attachment=params.get("attachment"),
+            in_reply_to=in_reply_to,
+            references=references
+        )
+        
+        # Send the email
+        success = email_service.send_email(send_request)
+        return success
+    
+    def post(self, shared: SharedState, prep_res, exec_res):
+        """Post-process by logging the result."""
+        if exec_res:
+            logger.info("Email sent successfully")
+            return "default"
+        else:
+            logger.error("Failed to send email")
+            return "error" 
