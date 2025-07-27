@@ -43,7 +43,7 @@ class TokenlessUserFlow:
                 .add_routing("conversation_context", "no_context", "finish")
                 .add_routing("conversation_context", "default", "agent")
                 # Agent routing
-                .add_routing("agent", "finish", "finish")
+                .add_routing("agent", "finish", "payment_request")  # Changed from "finish" to "payment_request"
                 .add_routing("agent", "default", "pop_action")
                 # Action routing - redirect content generation to payment
                 .add_routing("pop_action", "finish", "finish")

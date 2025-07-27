@@ -66,10 +66,21 @@ class EmailService:
         try:
             # Create a fresh IMAP connection for this operation
             imap_server = imaplib.IMAP4_SSL(self.settings.EMAIL_HOST)
-            imap_server.login(
-                self.settings.EMAIL_USERNAME, 
-                self.settings.EMAIL_PASSWORD
-            )
+            
+            # Attempt IMAP authentication with detailed error handling
+            try:
+                imap_server.login(
+                    self.settings.EMAIL_USERNAME, 
+                    self.settings.EMAIL_PASSWORD
+                )
+                self.logger.info("IMAP authentication successful")
+            except imaplib.IMAP4.error as auth_error:
+                self.logger.error(f"IMAP authentication failed: {auth_error}")
+                self.logger.error(f"Username: {self.settings.EMAIL_USERNAME}")
+                self.logger.error(f"Host: {self.settings.EMAIL_HOST}")
+                self.logger.error("Please check email credentials and account status")
+                return []
+            
             imap_server.select('INBOX')
             
             emails = []
@@ -144,15 +155,18 @@ class EmailService:
             # Add threading headers for proper email threading
             if request.in_reply_to:
                 msg['In-Reply-To'] = request.in_reply_to
-                self.logger.info(f"Setting In-Reply-To header: {request.in_reply_to}")
-            else:
-                self.logger.warning("No In-Reply-To header provided - email may not thread properly")
+                msg['References'] = request.references if request.references else request.in_reply_to
                 
-            if request.references:
-                msg['References'] = request.references
-                self.logger.info(f"Setting References header: {request.references}")
-            else:
-                self.logger.warning("No References header provided - email may not thread properly")
+                # Gmail-specific threading headers for better compatibility
+                msg['X-Google-Original-Message-ID'] = request.in_reply_to
+                msg['X-Google-Thread-ID'] = request.in_reply_to
+                # Generic threading headers for better compatibility
+                msg['X-Thread-Index'] = request.in_reply_to
+                msg['X-Thread-Topic'] = request.subject
+                
+                # Additional headers that help with Gmail threading
+                msg['X-Original-Message-ID'] = request.in_reply_to
+                msg['X-Reply-To'] = request.in_reply_to
             
             # Add Message-ID for proper threading
             import uuid
@@ -206,10 +220,23 @@ class EmailService:
             )
             if self.settings.EMAIL_USE_TLS:
                 smtp_server.starttls()
-            smtp_server.login(
-                self.settings.EMAIL_USERNAME, 
-                self.settings.EMAIL_PASSWORD
-            )
+            
+            # Attempt SMTP authentication with detailed error handling
+            try:
+                smtp_server.login(
+                    self.settings.EMAIL_USERNAME, 
+                    self.settings.EMAIL_PASSWORD
+                )
+                self.logger.info("SMTP authentication successful")
+            except smtplib.SMTPAuthenticationError as auth_error:
+                self.logger.error(f"SMTP authentication failed: {auth_error}")
+                self.logger.error(f"Username: {self.settings.EMAIL_USERNAME}")
+                self.logger.error(f"Host: {self.settings.EMAIL_HOST}:{self.settings.EMAIL_PORT}")
+                self.logger.error("Please check email credentials and account status")
+                raise EmailError(f"SMTP authentication failed: {auth_error}")
+            except smtplib.SMTPException as smtp_error:
+                self.logger.error(f"SMTP connection error: {smtp_error}")
+                raise EmailError(f"SMTP connection failed: {smtp_error}")
             
             # Send email
             recipients = [request.to]
@@ -221,6 +248,9 @@ class EmailService:
             self.logger.info(f"Email sent successfully to {request.to}")
             return True
             
+        except EmailError:
+            # Re-raise EmailError exceptions
+            raise
         except Exception as e:
             self.logger.error(f"Failed to send email: {e}")
             raise EmailError(f"Email sending failed: {e}")

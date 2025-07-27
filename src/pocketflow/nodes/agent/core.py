@@ -41,16 +41,75 @@ def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
                 json_str = json_str[len("```"):].strip()
             if json_str.endswith("```"):
                 json_str = json_str[:-3].strip()
+
+        # Clean control characters and normalize newlines
+        json_str = re.sub(r'[\x00-\x1f]', '', json_str)  # Remove control characters
+        json_str = re.sub(r'\r\n', '\n', json_str)  # Normalize line endings
+        json_str = re.sub(r'\r', '\n', json_str)  # Convert remaining \r to \n
         
-        parsed = json.loads(json_str)
-        if isinstance(parsed, list):
-            return parsed
-        elif isinstance(parsed, dict):
-            return [parsed]
-        else:
-            return []
+        # Escape newlines in string values
+        json_str = re.sub(r'"([^"]*?)\n([^"]*?)"', r'"\1\\n\2"', json_str)
+        
+        # Try to find the end of the JSON array/object
+        brace_count = 0
+        bracket_count = 0
+        in_string = False
+        escape_next = False
+        json_end = 0
+        
+        for i, char in enumerate(json_str):
+            if escape_next:
+                escape_next = False
+                continue
+                
+            if char == '\\':
+                escape_next = True
+                continue
+                
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+                
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                elif char == '[':
+                    bracket_count += 1
+                elif char == ']':
+                    bracket_count -= 1
+                    
+                # If we've closed all braces/brackets, this is the end
+                if brace_count == 0 and bracket_count == 0 and i > 0:
+                    json_end = i + 1
+                    break
+        
+        # Extract only the valid JSON part
+        if json_end > 0:
+            json_str = json_str[:json_end]
+        
+        # Attempt to parse the cleaned JSON
+        actions = json.loads(json_str)
+        
+        # Validate the structure
+        if not isinstance(actions, list):
+            actions = [actions]
+            
+        # Validate each action
+        valid_actions = []
+        for action in actions:
+            if isinstance(action, dict) and "action" in action:
+                valid_actions.append(action)
+                
+        return valid_actions
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"[extract_all_actions_from_json] JSON parse error: {e}")
+        logger.error(f"[extract_all_actions_from_json] Problematic JSON: {json_str[:500]}...")
+        return []
     except Exception as e:
-        print(f"[extract_all_actions_from_json] JSON parse error: {e}")
+        logger.error(f"[extract_all_actions_from_json] Unexpected error: {e}")
         return []
 
 

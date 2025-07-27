@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from ...core.node import Node
 from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
-from ...services.email_service import EmailService
+from ...services.email_service import EmailService, EmailError
 from ...config.settings import get_settings
 
 logger = get_logger("TokenlessSendEmailNode")
@@ -95,7 +95,7 @@ class TokenlessSendEmailNode(Node):
         # Combine agent response with payment info as a note
         combined_body = f"{agent_body}\n\n---\n\n**Payment Information:**\n{payment_info}"
         
-        # Subject line for proper threading
+        # Subject line for proper threading - use the original subject if available
         original_subject = email.get("subject", "")
         if original_subject and original_subject.strip():
             # For non-empty subjects, use "Re:" prefix
@@ -110,9 +110,16 @@ class TokenlessSendEmailNode(Node):
             # Add "Re:" prefix for proper threading
             reply_subject = f"Re: {clean_subject}"
         else:
-            # For empty subjects (like your original emails), use empty subject for proper threading
-            # This matches the format that Gmail expects for threading
-            reply_subject = ""
+            # For empty subjects, use a default subject that matches the original email content
+            # Extract a few words from the email body to create a meaningful subject
+            body_words = email.get("body", "").split()[:5]  # First 5 words
+            if body_words:
+                subject_snippet = " ".join(body_words).strip()
+                if len(subject_snippet) > 50:
+                    subject_snippet = subject_snippet[:50] + "..."
+                reply_subject = f"Re: {subject_snippet}"
+            else:
+                reply_subject = "Re: Your email request"
             
         send_request = EmailSendRequest(
             to=sender_email,
@@ -122,15 +129,32 @@ class TokenlessSendEmailNode(Node):
             references=references
         )
         
-        # Send the email
-        success = email_service.send_email(send_request)
-        return success
+        # Send the email with proper error handling
+        try:
+            success = email_service.send_email(send_request)
+            return success
+        except EmailError as e:
+            logger.error(f"Email sending failed: {e}")
+            # Re-raise the exception so it can be handled by the Node's error handling
+            raise
+    
+    def exec_fallback(self, prep_result, exc):
+        """Handle email sending failures gracefully."""
+        if isinstance(exc, EmailError):
+            logger.error(f"Email authentication failed: {exc}")
+            # Return False to indicate failure, which will be handled in post()
+            return False
+        else:
+            # For other exceptions, re-raise
+            raise exc
     
     def post(self, shared: SharedState, prep_res, exec_res):
         """Post-process the email sending result."""
-        if exec_res:
+        if exec_res is True:  # Explicitly check for True, not just truthy
             logger.info("Payment request email sent successfully")
             return "default"
         else:
-            logger.error("Failed to send payment request email")
+            logger.error("Failed to send payment request email - authentication or connection issue")
+            # Store the error in shared state for debugging
+            shared.last_error = "Email sending failed - check SMTP credentials and connection"
             return "send_failed" 
