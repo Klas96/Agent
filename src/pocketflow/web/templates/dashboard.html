@@ -4,6 +4,31 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+<!-- Error Alerts -->
+{% if recent_errors %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert alert-danger">
+            <h6><i class="fas fa-exclamation-triangle"></i> Recent Errors ({{ recent_errors|length }})</h6>
+            <div class="error-list" style="max-height: 200px; overflow-y: auto;">
+                {% for error in recent_errors[:5] %}
+                <div class="mb-2 p-2 bg-light rounded">
+                    <small class="text-muted">{{ error.timestamp }}</small>
+                    <strong>{{ error.type }}</strong>: {{ error.message }}
+                    {% if error.details %}
+                    <br><small class="text-muted">{{ error.details }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if recent_errors|length > 5 %}
+                <small class="text-muted">... and {{ recent_errors|length - 5 }} more errors</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="row">
     <!-- System Statistics -->
     <div class="col-md-3">
@@ -48,7 +73,19 @@
         </div>
     </div>
     
-
+    <div class="col-md-3">
+        <div class="stats-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <h3 class="mb-0">{{ recent_errors|length }}</h3>
+                    <p class="mb-0">Recent Errors</p>
+                </div>
+                <div class="align-self-center">
+                    <i class="fas fa-exclamation-triangle fa-2x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row">
@@ -76,6 +113,11 @@
                             <i class="fas fa-code"></i> API Endpoints
                         </a>
                     </div>
+                    <div class="col-6 mb-3">
+                        <button class="btn btn-warning w-100" onclick="refreshHealth()">
+                            <i class="fas fa-sync"></i> Refresh Health
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -91,45 +133,45 @@
                 <div class="row">
                     <div class="col-6">
                         <div class="d-flex align-items-center mb-3">
-                            <div class="bg-success rounded-circle p-2 me-3">
-                                <i class="fas fa-check text-white"></i>
+                            <div id="db-status" class="rounded-circle p-2 me-3">
+                                <i class="fas fa-database text-white"></i>
                             </div>
                             <div>
                                 <h6 class="mb-0">Database</h6>
-                                <small class="text-muted">Connected</small>
+                                <small id="db-text" class="text-muted">Checking...</small>
                             </div>
                         </div>
                     </div>
                     <div class="col-6">
                         <div class="d-flex align-items-center mb-3">
-                            <div class="bg-success rounded-circle p-2 me-3">
-                                <i class="fas fa-check text-white"></i>
+                            <div id="email-status" class="rounded-circle p-2 me-3">
+                                <i class="fas fa-envelope text-white"></i>
                             </div>
                             <div>
                                 <h6 class="mb-0">Email Service</h6>
-                                <small class="text-muted">Active</small>
+                                <small id="email-text" class="text-muted">Checking...</small>
                             </div>
                         </div>
                     </div>
                     <div class="col-6">
                         <div class="d-flex align-items-center mb-3">
-                            <div class="bg-success rounded-circle p-2 me-3">
-                                <i class="fas fa-check text-white"></i>
+                            <div id="llm-status" class="rounded-circle p-2 me-3">
+                                <i class="fas fa-brain text-white"></i>
                             </div>
                             <div>
                                 <h6 class="mb-0">LLM Service</h6>
-                                <small class="text-muted">Ready</small>
+                                <small id="llm-text" class="text-muted">Checking...</small>
                             </div>
                         </div>
                     </div>
                     <div class="col-6">
                         <div class="d-flex align-items-center mb-3">
-                            <div class="bg-success rounded-circle p-2 me-3">
-                                <i class="fas fa-check text-white"></i>
+                            <div id="btc-status" class="rounded-circle p-2 me-3">
+                                <i class="fas fa-bitcoin text-white"></i>
                             </div>
                             <div>
                                 <h6 class="mb-0">Bitcoin Service</h6>
-                                <small class="text-muted">Connected</small>
+                                <small id="btc-text" class="text-muted">Checking...</small>
                             </div>
                         </div>
                     </div>
@@ -143,8 +185,11 @@
     <!-- Recent Activity -->
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="fas fa-history"></i> Recent Activity</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshErrors()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -152,18 +197,40 @@
                         <thead>
                             <tr>
                                 <th>Time</th>
-                                <th>Action</th>
-                                <th>User</th>
+                                <th>Type</th>
+                                <th>Message</th>
+                                <th>Severity</th>
                                 <th>Details</th>
-                                <th>Status</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="5" class="text-center text-muted">
-                                    <i class="fas fa-info-circle"></i> No recent activity
-                                </td>
-                            </tr>
+                        <tbody id="activity-table">
+                            {% if recent_errors %}
+                                {% for error in recent_errors[:10] %}
+                                <tr class="{% if error.severity == 'error' %}table-danger{% elif error.severity == 'warning' %}table-warning{% else %}table-info{% endif %}">
+                                    <td>{{ error.timestamp }}</td>
+                                    <td><span class="badge bg-secondary">{{ error.type }}</span></td>
+                                    <td>{{ error.message }}</td>
+                                    <td>
+                                        <span class="badge {% if error.severity == 'error' %}bg-danger{% elif error.severity == 'warning' %}bg-warning{% else %}bg-info{% endif %}">
+                                            {{ error.severity }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if error.details %}
+                                        <small class="text-muted">{{ error.details[:50] }}{% if error.details|length > 50 %}...{% endif %}</small>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        <i class="fas fa-info-circle"></i> No recent errors
+                                    </td>
+                                </tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
@@ -176,6 +243,9 @@
 {% block scripts %}
 <script>
 $(document).ready(function() {
+    // Initial health check
+    refreshHealth();
+    
     // Refresh stats every 30 seconds
     setInterval(function() {
         $.get('/admin/api/stats', function(data) {
@@ -183,12 +253,106 @@ $(document).ready(function() {
                 // Update stats cards
                 $('.stats-card h3').each(function(index) {
                     const stats = data.stats;
-                    const values = [stats.total_users, stats.total_tokens, stats.total_payments, stats.greenlist_emails + stats.greenlist_domains];
-                    $(this).text(values[index]);
+                    const values = [stats.total_users, stats.total_tokens, stats.total_payments];
+                    if (values[index] !== undefined) {
+                        $(this).text(values[index]);
+                    }
                 });
             }
         });
     }, 30000);
+    
+    // Refresh health every 60 seconds
+    setInterval(refreshHealth, 60000);
 });
+
+function refreshHealth() {
+    $.get('/admin/api/health', function(data) {
+        if (data.success) {
+            updateHealthStatus(data.health);
+        } else {
+            console.error('Failed to get health status:', data.error);
+        }
+    });
+}
+
+function updateHealthStatus(health) {
+    // Database
+    updateServiceStatus('db', health.database);
+    
+    // Email Service
+    updateServiceStatus('email', health.email_service);
+    
+    // LLM Service
+    updateServiceStatus('llm', health.llm_service);
+    
+    // Bitcoin Service
+    updateServiceStatus('btc', health.bitcoin_service);
+}
+
+function updateServiceStatus(service, status) {
+    const statusDiv = $(`#${service}-status`);
+    const textDiv = $(`#${service}-text`);
+    
+    if (status.status === 'connected' || status.status === 'active' || status.status === 'ready') {
+        statusDiv.removeClass('bg-danger bg-warning').addClass('bg-success');
+        textDiv.text(status.status);
+    } else if (status.status === 'unknown') {
+        statusDiv.removeClass('bg-success bg-danger').addClass('bg-warning');
+        textDiv.text('Unknown');
+    } else {
+        statusDiv.removeClass('bg-success bg-warning').addClass('bg-danger');
+        textDiv.text(status.status);
+    }
+}
+
+function refreshErrors() {
+    $.get('/admin/api/errors', function(data) {
+        if (data.success) {
+            updateErrorTable(data.errors);
+        } else {
+            console.error('Failed to get errors:', data.error);
+        }
+    });
+}
+
+function updateErrorTable(errors) {
+    const tbody = $('#activity-table');
+    tbody.empty();
+    
+    if (errors.length === 0) {
+        tbody.append(`
+            <tr>
+                <td colspan="5" class="text-center text-muted">
+                    <i class="fas fa-info-circle"></i> No recent errors
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    errors.slice(0, 10).forEach(error => {
+        const severityClass = error.severity === 'error' ? 'table-danger' : 
+                            error.severity === 'warning' ? 'table-warning' : 'table-info';
+        const severityBadge = error.severity === 'error' ? 'bg-danger' : 
+                             error.severity === 'warning' ? 'bg-warning' : 'bg-info';
+        
+        tbody.append(`
+            <tr class="${severityClass}">
+                <td>${error.timestamp}</td>
+                <td><span class="badge bg-secondary">${error.type}</span></td>
+                <td>${error.message}</td>
+                <td>
+                    <span class="badge ${severityBadge}">
+                        ${error.severity}
+                    </span>
+                </td>
+                <td>
+                    ${error.details ? `<small class="text-muted">${error.details.substring(0, 50)}${error.details.length > 50 ? '...' : ''}</small>` : '<span class="text-muted">-</span>'}
+                </td>
+            </tr>
+        `);
+    });
+}
 </script>
 {% endblock %} 

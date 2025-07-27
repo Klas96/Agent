@@ -148,7 +148,7 @@ $(document).ready(function() {
     // Form validation
     $('#tokens').on('input', function() {
         const value = parseInt($(this).val());
-        if (value < 0) {
+        if (value < 0) {  // This only checks for negative values
             $(this).addClass('is-invalid');
             $(this).next('.invalid-feedback').remove();
             $(this).after('<div class="invalid-feedback">Token balance cannot be negative</div>');

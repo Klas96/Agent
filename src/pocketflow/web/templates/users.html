@@ -187,7 +187,8 @@ function saveUserEdit() {
     const personality = $('#editUserPersonality').val();
     const tokens = parseInt($('#editUserTokens').val());
     
-    if (!tokens || tokens < 0) {
+    // Fix: Check for NaN and negative values, but allow 0
+    if (isNaN(tokens) || tokens < 0) {
         showAlert('Please enter a valid number of tokens', 'danger');
         return;
     }

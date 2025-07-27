@@ -4,12 +4,128 @@ Admin routes for PocketFlow control panel.
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from typing import Dict, Any, List, Optional
 import json
+from datetime import datetime, timedelta
 from ..services import database_service
 from ..core.types import User, BTCAddress, PaymentTransaction
 from ..utils.logging import get_logger
 
 admin_bp = Blueprint("admin", __name__)
 logger = get_logger("AdminRoutes")
+
+# Global error tracking (in production, use Redis or database)
+_recent_errors = []
+_max_errors = 50
+
+def add_error(error_type: str, message: str, details: str = None, severity: str = "error"):
+    """Add an error to the recent errors list."""
+    global _recent_errors
+    
+    error_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "type": error_type,
+        "message": message,
+        "details": details,
+        "severity": severity
+    }
+    
+    _recent_errors.append(error_entry)
+    
+    # Keep only the most recent errors
+    if len(_recent_errors) > _max_errors:
+        _recent_errors = _recent_errors[-_max_errors:]
+    
+    logger.error(f"Dashboard Error: {error_type} - {message}")
+
+def get_recent_errors(hours: int = 24) -> List[Dict[str, Any]]:
+    """Get recent errors from the last N hours."""
+    global _recent_errors
+    
+    cutoff_time = datetime.now() - timedelta(hours=hours)
+    
+    recent_errors = []
+    for error in reversed(_recent_errors):  # Most recent first
+        try:
+            error_time = datetime.fromisoformat(error["timestamp"])
+            if error_time >= cutoff_time:
+                recent_errors.append(error)
+        except:
+            # If timestamp parsing fails, include it anyway
+            recent_errors.append(error)
+    
+    return recent_errors
+
+def get_system_health() -> Dict[str, Any]:
+    """Get real system health status."""
+    health_status = {
+        "database": {"status": "unknown", "last_check": None, "error": None},
+        "email_service": {"status": "unknown", "last_check": None, "error": None},
+        "llm_service": {"status": "unknown", "last_check": None, "error": None},
+        "bitcoin_service": {"status": "unknown", "last_check": None, "error": None}
+    }
+    
+    try:
+        # Check database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        conn.close()
+        health_status["database"]["status"] = "connected"
+        health_status["database"]["last_check"] = datetime.now().isoformat()
+    except Exception as e:
+        health_status["database"]["status"] = "disconnected"
+        health_status["database"]["error"] = str(e)
+        health_status["database"]["last_check"] = datetime.now().isoformat()
+        add_error("database", f"Database connection failed: {e}")
+    
+    try:
+        # Check email service (basic check)
+        from ..services.email_service import EmailService
+        from ..config.settings import get_settings
+        settings = get_settings()
+        email_service = EmailService(settings)
+        # Try to get IMAP connection
+        imap_server = email_service._get_imap_server()
+        if imap_server:
+            health_status["email_service"]["status"] = "active"
+            health_status["email_service"]["last_check"] = datetime.now().isoformat()
+    except Exception as e:
+        health_status["email_service"]["status"] = "inactive"
+        health_status["email_service"]["error"] = str(e)
+        health_status["email_service"]["last_check"] = datetime.now().isoformat()
+        add_error("email_service", f"Email service check failed: {e}")
+    
+    try:
+        # Check LLM service
+        from ..services.llm_service import LLMService
+        llm_service = LLMService()
+        # Try a simple test call
+        test_response = llm_service.call_llm([{"role": "user", "content": "test"}])
+        if test_response:
+            health_status["llm_service"]["status"] = "ready"
+            health_status["llm_service"]["last_check"] = datetime.now().isoformat()
+    except Exception as e:
+        health_status["llm_service"]["status"] = "unavailable"
+        health_status["llm_service"]["error"] = str(e)
+        health_status["llm_service"]["last_check"] = datetime.now().isoformat()
+        add_error("llm_service", f"LLM service check failed: {e}")
+    
+    try:
+        # Check Bitcoin service
+        from ..services.bitcoin_service import BitcoinService
+        bitcoin_service = BitcoinService()
+        # Try to get a test address
+        test_address = bitcoin_service.get_or_create_address("test@example.com")
+        if test_address:
+            health_status["bitcoin_service"]["status"] = "connected"
+            health_status["bitcoin_service"]["last_check"] = datetime.now().isoformat()
+    except Exception as e:
+        health_status["bitcoin_service"]["status"] = "disconnected"
+        health_status["bitcoin_service"]["error"] = str(e)
+        health_status["bitcoin_service"]["last_check"] = datetime.now().isoformat()
+        add_error("bitcoin_service", f"Bitcoin service check failed: {e}")
+    
+    return health_status
 
 # Database connection function
 def get_db_connection():
@@ -312,10 +428,13 @@ def dashboard():
     """Dashboard page."""
     try:
         stats = get_system_stats()
-        return render_template("dashboard.html", stats=stats)
+        health_status = get_system_health()
+        recent_errors = get_recent_errors()
+        return render_template("dashboard.html", stats=stats, health_status=health_status, recent_errors=recent_errors)
     except Exception as e:
         logger.error(f"Error in dashboard: {e}")
-        return render_template("dashboard.html", stats={})
+        add_error("dashboard", f"Dashboard failed to load: {e}")
+        return render_template("dashboard.html", stats={}, health_status={}, recent_errors=[])
 
 @admin_bp.route("/users")
 def users_list():
@@ -325,6 +444,7 @@ def users_list():
         return render_template("users.html", users=users)
     except Exception as e:
         logger.error(f"Error in users list: {e}")
+        add_error("users", f"Failed to load users list: {e}")
         return render_template("users.html", users=[])
 
 @admin_bp.route("/users/add", methods=["GET", "POST"])
@@ -351,7 +471,9 @@ def add_user_page():
             flash(f"User {email} added successfully with {initial_tokens} tokens", "success")
             return redirect(url_for("admin.users_list"))
         else:
-            flash(f"Failed to add user {email}. User may already exist.", "error")
+            error_msg = f"Failed to add user {email}. User may already exist."
+            flash(error_msg, "error")
+            add_error("user_management", error_msg, f"Email: {email}, Tokens: {initial_tokens}")
             return render_template("add_user.html")
     
     return render_template("add_user.html")
@@ -395,6 +517,7 @@ def user_detail(email):
         return render_template("user_detail.html", user=user, btc_addresses=btc_addresses, payments=payments)
     except Exception as e:
         logger.error(f"Error in user detail: {e}")
+        add_error("user_detail", f"Failed to load user details for {email}: {e}")
         flash("Error loading user details", "error")
         return redirect(url_for("admin.users_list"))
 
@@ -421,12 +544,15 @@ def edit_user(email):
                 flash(f"User {email} updated successfully", "success")
                 return redirect(url_for("admin.user_detail", email=email))
             else:
-                flash(f"Failed to update user {email}", "error")
+                error_msg = f"Failed to update user {email}"
+                flash(error_msg, "error")
+                add_error("user_management", error_msg, f"Email: {email}, New tokens: {new_tokens}")
                 return render_template("edit_user.html", user=user)
         
         return render_template("edit_user.html", user=user)
     except Exception as e:
         logger.error(f"Error in edit user: {e}")
+        add_error("user_edit", f"Failed to edit user {email}: {e}")
         flash("Error loading user", "error")
         return redirect(url_for("admin.users_list"))
 
@@ -437,9 +563,12 @@ def delete_user_route(email):
         if delete_user(email):
             flash(f"User {email} deleted successfully", "success")
         else:
-            flash(f"Failed to delete user {email}", "error")
+            error_msg = f"Failed to delete user {email}"
+            flash(error_msg, "error")
+            add_error("user_management", error_msg, f"Email: {email}")
     except Exception as e:
         logger.error(f"Error deleting user {email}: {e}")
+        add_error("user_delete", f"Failed to delete user {email}: {e}")
         flash("Error deleting user", "error")
     
     return redirect(url_for("admin.users_list"))
@@ -454,6 +583,7 @@ def api_users():
         return jsonify({"success": True, "users": users})
     except Exception as e:
         logger.error(f"Error in API users: {e}")
+        add_error("api", f"API users endpoint failed: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @admin_bp.route("/api/stats")
@@ -464,6 +594,50 @@ def api_stats():
         return jsonify({"success": True, "stats": stats})
     except Exception as e:
         logger.error(f"Error in API stats: {e}")
+        add_error("api", f"API stats endpoint failed: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@admin_bp.route("/api/health")
+def api_health():
+    """API endpoint for system health."""
+    try:
+        health_status = get_system_health()
+        return jsonify({"success": True, "health": health_status})
+    except Exception as e:
+        logger.error(f"Error in API health: {e}")
+        add_error("api", f"API health endpoint failed: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@admin_bp.route("/api/errors")
+def api_errors():
+    """API endpoint for recent errors."""
+    try:
+        hours = request.args.get("hours", 24, type=int)
+        errors = get_recent_errors(hours)
+        return jsonify({"success": True, "errors": errors})
+    except Exception as e:
+        logger.error(f"Error in API errors: {e}")
+        add_error("api", f"API errors endpoint failed: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@admin_bp.route("/api/errors", methods=["POST"])
+def api_add_error():
+    """API endpoint for adding errors."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"})
+        
+        error_type = data.get("type", "unknown")
+        message = data.get("message", "Unknown error")
+        details = data.get("details")
+        severity = data.get("severity", "error")
+        
+        add_error(error_type, message, details, severity)
+        return jsonify({"success": True, "message": "Error logged successfully"})
+    except Exception as e:
+        logger.error(f"Error in API add error: {e}")
+        add_error("api", f"API add error endpoint failed: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @admin_bp.route("/api/users", methods=["POST"])
@@ -493,10 +667,13 @@ def api_add_user():
                 "user": {"email": email, "name": name, "personality": personality, "tokens": initial_tokens}
             })
         else:
-            return jsonify({"success": False, "error": f"Failed to add user {email}"})
+            error_msg = f"Failed to add user {email}"
+            add_error("api", error_msg, f"Email: {email}, Tokens: {initial_tokens}")
+            return jsonify({"success": False, "error": error_msg})
     
     except Exception as e:
         logger.error(f"Error in API add user: {e}")
+        add_error("api", f"API add user endpoint failed: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @admin_bp.route("/api/users/<email>", methods=["GET"])
@@ -510,12 +687,14 @@ def api_get_user(email):
                 "user": user
             })
         else:
+            add_error("api", f"User not found: {email}")
             return jsonify({
                 "success": False,
                 "error": "User not found"
             }), 404
     except Exception as e:
         logger.error(f"Error getting user {email}: {e}")
+        add_error("api", f"API get user endpoint failed for {email}: {e}")
         return jsonify({
             "success": False,
             "error": "Failed to get user details"
@@ -528,9 +707,12 @@ def api_delete_user(email):
         if delete_user(email):
             return jsonify({"success": True, "message": f"User {email} deleted successfully"})
         else:
-            return jsonify({"success": False, "error": "Failed to delete user"})
+            error_msg = f"Failed to delete user {email}"
+            add_error("api", error_msg)
+            return jsonify({"success": False, "error": error_msg})
     except Exception as e:
         logger.error(f"Error in API delete user: {e}")
+        add_error("api", f"API delete user endpoint failed for {email}: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @admin_bp.route("/api/users/<email>", methods=["PUT"])
@@ -555,8 +737,11 @@ def api_update_user(email):
                 "user": {"email": email, "name": name, "personality": personality, "tokens": tokens}
             })
         else:
-            return jsonify({"success": False, "error": "Failed to update user"})
+            error_msg = f"Failed to update user {email}"
+            add_error("api", error_msg, f"Email: {email}, Tokens: {tokens}")
+            return jsonify({"success": False, "error": error_msg})
     
     except Exception as e:
         logger.error(f"Error in API update user: {e}")
+        add_error("api", f"API update user endpoint failed for {email}: {e}")
         return jsonify({"success": False, "error": str(e)}) 

@@ -260,7 +260,7 @@ class BitcoinService:
     def get_service_info(self) -> Dict[str, Any]:
         """Get information about the Bitcoin service."""
         return {
-            "network": self.settings.bitcoin.network,
+            "network": "mainnet",  # Default to mainnet
             "btc_price_usd": self.get_btc_price(),
             "total_addresses": len(self._addresses),
             "pending_payments": len(self._pending_payments),
