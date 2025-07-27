@@ -91,47 +91,17 @@ class EmailService:
                         # Extract email data
                         email_data = self._parse_email_message(email_message, email_id)
                         if email_data:
+                            # Process all emails (no filtering)
                             emails.append(email_data)
                             # Mark as read immediately to prevent reprocessing
                             self.mark_as_read(email_id)
-                            self.logger.info(f"Added unread email {email_id} to processing queue and marked as read")
+                            self.logger.info(f"Added email {email_id} from {email_data.from_} to processing queue and marked as read")
                             
                     except Exception as e:
                         self.logger.warning(f"Failed to parse email {num}: {e}")
                         continue
             else:
                 self.logger.info("No unread emails found")
-                
-                # Check for very recent emails (last 2 minutes) that might have been marked as read
-                from datetime import datetime, timedelta
-                two_minutes_ago = (datetime.now() - timedelta(minutes=2)).strftime("%d-%b-%Y")
-                
-                try:
-                    # Search for emails from the last 2 minutes
-                    _, recent_message_numbers = imap_server.search(None, f'SINCE {two_minutes_ago}')
-                    if recent_message_numbers[0]:
-                        recent_emails = recent_message_numbers[0].split()
-                        # Only process the 1 most recent email to avoid spam
-                        for num in recent_emails[-1:]:
-                            email_id = num.decode()
-                            
-                            try:
-                                _, msg_data = imap_server.fetch(num, '(RFC822)')
-                                email_body = msg_data[0][1]
-                                email_message = email.message_from_bytes(email_body)
-                                
-                                # Extract email data
-                                email_data = self._parse_email_message(email_message, email_id)
-                                if email_data and email_data.from_email == "klas0holmgren@gmail.com":
-                                    emails.append(email_data)
-                                    # Mark as read immediately to prevent reprocessing
-                                    self.mark_as_read(email_id)
-                                    self.logger.info(f"Added recent email {email_id} to processing queue and marked as read")
-                            except Exception as e:
-                                self.logger.error(f"Error processing recent email {email_id}: {e}")
-                                continue
-                except Exception as e:
-                    self.logger.error(f"Error checking recent emails: {e}")
             
             self.logger.info(f"Fetched {len(emails)} emails total")
             return emails
@@ -175,19 +145,52 @@ class EmailService:
             if request.in_reply_to:
                 msg['In-Reply-To'] = request.in_reply_to
                 self.logger.info(f"Setting In-Reply-To header: {request.in_reply_to}")
+            else:
+                self.logger.warning("No In-Reply-To header provided - email may not thread properly")
+                
             if request.references:
                 msg['References'] = request.references
                 self.logger.info(f"Setting References header: {request.references}")
+            else:
+                self.logger.warning("No References header provided - email may not thread properly")
             
             # Add Message-ID for proper threading
             import uuid
-            message_id = f"<pocketflow-{uuid.uuid4()}@mail.gmail.com>"
+            import time
+            # Use the actual email domain for Message-ID
+            email_domain = self.settings.EMAIL_USERNAME.split('@')[-1] if '@' in self.settings.EMAIL_USERNAME else 'pocketflow.com'
+            # Ensure Message-ID format is RFC compliant with timestamp for uniqueness
+            timestamp = int(time.time())
+            message_id = f"<pocketflow-{timestamp}-{uuid.uuid4().hex[:8]}@{email_domain}>"
             msg['Message-ID'] = message_id
             self.logger.info(f"Setting Message-ID header: {message_id}")
+            
+            # Log all headers for debugging
+            self.logger.info("Final email headers:")
+            for header, value in msg.items():
+                self.logger.info(f"  {header}: {value}")
+            
+            # Additional debugging for threading headers
+            self.logger.info("Threading headers summary:")
+            self.logger.info(f"  In-Reply-To: {msg.get('In-Reply-To', 'NOT SET')}")
+            self.logger.info(f"  References: {msg.get('References', 'NOT SET')}")
+            self.logger.info(f"  Message-ID: {msg.get('Message-ID', 'NOT SET')}")
+            self.logger.info(f"  Subject: {msg.get('Subject', 'NOT SET')}")
             
             # Add additional headers that some email clients require for threading
             msg['X-Mailer'] = 'PocketFlow Email Agent'
             msg['X-Thread-Id'] = request.in_reply_to if request.in_reply_to else message_id
+            
+            # Add headers for better email client compatibility
+            if request.in_reply_to:
+                msg['X-Original-Message-ID'] = request.in_reply_to
+                msg['X-Reply-To'] = request.in_reply_to
+                # Gmail-specific threading headers
+                msg['X-Google-Original-Message-ID'] = request.in_reply_to
+                msg['X-Google-Thread-ID'] = request.in_reply_to
+                # Generic threading headers for better compatibility
+                msg['X-Thread-Index'] = request.in_reply_to
+                msg['X-Thread-Topic'] = request.subject
             
             # Add body
             msg.attach(MIMEText(request.body, 'plain', 'utf8'))
@@ -229,7 +232,7 @@ class EmailService:
                     self.logger.warning(f"Error closing SMTP connection: {e}")
     
     def mark_as_read(self, email_id: str) -> bool:
-        """Mark an email as read by setting the \Seen flag."""
+        """Mark an email as read by setting the \\Seen flag."""
         imap_server = None
         try:
             # Create a fresh IMAP connection for this operation
@@ -286,6 +289,13 @@ class EmailService:
             message_id = email_message.get('Message-ID', '')
             in_reply_to = email_message.get('In-Reply-To', '')
             references = email_message.get('References', '')
+            
+            # Debug logging for threading headers
+            self.logger.info(f"Parsed email headers for {email_id}:")
+            self.logger.info(f"  Subject: {subject}")
+            self.logger.info(f"  Message-ID: {message_id}")
+            self.logger.info(f"  In-Reply-To: {in_reply_to}")
+            self.logger.info(f"  References: {references}")
             
             # Extract body
             body = self._get_email_body(email_message)

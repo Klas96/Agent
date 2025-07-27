@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 
 from ...core.node import SimpleNode
 from ...core.types import SharedState, PaymentRequest
-from ...services import bitcoin_service
+from ...services.bitcoin_service import BitcoinService
 from ...utils.logging import get_logger
 from ...utils.errors import BitcoinError
 
@@ -34,12 +34,25 @@ class PurchaseTokensWithBitcoinNode(SimpleNode):
             Processing result with routing information
         """
         try:
-            email = shared.get("email", {}).get("from") or shared.get("user")
+            # Extract email from shared state
+            email = None
+            if hasattr(shared, 'email') and shared.email:
+                from_field = shared.email.get("from", "")
+                if "<" in from_field and ">" in from_field:
+                    email = from_field.split("<")[1].split(">")[0]
+                else:
+                    email = from_field
+            elif hasattr(shared, 'user') and shared.user:
+                email = shared.user
+            
             if not email:
                 self.logger.warning("No user email found")
                 return {"route": "default", "error": "No user email found"}
             
             self.logger.info(f"Creating Bitcoin payment request for {email}")
+            
+            # Initialize Bitcoin service
+            bitcoin_service = BitcoinService()
             
             # Get or create Bitcoin address for user
             btc_address = bitcoin_service.get_or_create_address(email)
@@ -69,10 +82,10 @@ class PurchaseTokensWithBitcoinNode(SimpleNode):
                 "Once payment is received, your tokens will be credited automatically."
             )
             
-            # Store payment info in shared state
-            shared["payment_info"] = payment_info
-            shared["btc_address"] = btc_address
-            shared["reply_body"] = instructions
+            # Store payment info in shared state using attribute assignment
+            setattr(shared, 'payment_info', payment_info)
+            setattr(shared, 'btc_address', btc_address)
+            setattr(shared, 'reply_body', instructions)
             
             self.logger.info(f"Payment request created: {payment_info}")
             
@@ -80,9 +93,9 @@ class PurchaseTokensWithBitcoinNode(SimpleNode):
             
         except BitcoinError as e:
             self.logger.error(f"Bitcoin service error: {e}")
-            shared["reply_body"] = f"Sorry, I encountered an error while setting up the payment: {str(e)}"
+            setattr(shared, 'reply_body', f"Sorry, I encountered an error while setting up the payment: {str(e)}")
             return {"route": "default", "error": str(e)}
         except Exception as e:
             self.logger.error(f"Unexpected error in PurchaseTokensWithBitcoinNode: {e}")
-            shared["reply_body"] = f"Sorry, I encountered an error while setting up the payment: {str(e)}"
+            setattr(shared, 'reply_body', f"Sorry, I encountered an error while setting up the payment: {str(e)}")
             return {"route": "default", "error": str(e)} 

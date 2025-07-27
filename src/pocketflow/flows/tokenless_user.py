@@ -9,10 +9,11 @@ from typing import Dict, Any, Optional
 from ..core.flow import Flow, FlowBuilder
 from ..core.types import FlowType, SharedState
 from ..nodes import (
-    FetchEmailNode, SendEmailNode, ConversationContextNode,
+    FetchEmailNode, ConversationContextNode,
     AgentNode, PopAgentActionNode,
     PurchaseTokensWithBitcoinNode, FinishNode
 )
+from ..nodes.email.tokenless_send import TokenlessSendEmailNode
 from ..utils.logging import get_logger
 
 
@@ -31,10 +32,9 @@ class TokenlessUserFlow:
                 .add_step("agent", AgentNode("agent"))
                 .add_step("pop_action", PopAgentActionNode("pop_action"))
                 .add_step("payment_request", PurchaseTokensWithBitcoinNode("payment_request"))
-                .add_step("send_email", SendEmailNode("send_email"))
+                .add_step("send_email", TokenlessSendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
                 .set_start("fetch_email")
-                .add_end_step("send_email")
                 .add_end_step("finish")
                 # Email fetching routing
                 .add_routing("fetch_email", "no_email", "finish")
@@ -49,7 +49,7 @@ class TokenlessUserFlow:
                 .add_routing("pop_action", "finish", "finish")
                 .add_routing("pop_action", "generate", "payment_request")
                 .add_routing("pop_action", "investigate", "payment_request")
-                .add_routing("pop_action", "send", "send_email")
+                .add_routing("pop_action", "send", "payment_request")
                 # Payment request routing
                 .add_routing("payment_request", "send", "send_email")
                 .add_routing("payment_request", "default", "finish")

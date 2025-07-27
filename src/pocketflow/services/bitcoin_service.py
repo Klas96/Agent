@@ -198,7 +198,7 @@ class BitcoinService:
     
     def _usd_to_btc(self, usd_amount: float) -> Decimal:
         """
-        Convert USD amount to BTC.
+        Convert USD amount to BTC using current market price.
         
         Args:
             usd_amount: Amount in USD
@@ -207,10 +207,11 @@ class BitcoinService:
             Equivalent amount in BTC
         """
         try:
-            # In a real implementation, this would fetch current BTC price
-            # For now, use a fixed rate
-            btc_price_usd = 50000  # Simplified BTC price
+            # Get current BTC price from CoinGecko
+            btc_price_usd = self.get_btc_price()
             btc_amount = Decimal(str(usd_amount)) / Decimal(str(btc_price_usd))
+            
+            self.logger.info(f"Converted ${usd_amount} to {btc_amount:.8f} BTC at ${btc_price_usd:,.2f}/BTC")
             return btc_amount
             
         except Exception as e:
@@ -219,16 +220,35 @@ class BitcoinService:
     
     def get_btc_price(self) -> float:
         """
-        Get current BTC price in USD.
+        Get current BTC price in USD from CoinGecko API.
         
         Returns:
             BTC price in USD
         """
         try:
-            # In a real implementation, this would fetch from an API
-            # For now, return a fixed price
-            return 50000.0
+            # Fetch current BTC price from CoinGecko API
+            url = "https://api.coingecko.com/api/v3/simple/price"
+            params = {
+                "ids": "bitcoin",
+                "vs_currencies": "usd"
+            }
             
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            btc_price = data.get("bitcoin", {}).get("usd", 0.0)
+            
+            if btc_price <= 0:
+                self.logger.warning("Invalid BTC price from CoinGecko, using fallback")
+                return 50000.0
+            
+            self.logger.info(f"Fetched BTC price from CoinGecko: ${btc_price:,.2f}")
+            return float(btc_price)
+            
+        except requests.RequestException as e:
+            self.logger.error(f"Failed to fetch BTC price from CoinGecko: {e}")
+            return 50000.0  # Fallback price
         except Exception as e:
             self.logger.error(f"Failed to get BTC price: {e}")
             return 50000.0  # Fallback price

@@ -10,6 +10,7 @@ from .email import (
     ConversationContextNode,
     PostProcessNode
 )
+from .email.tokenless_send import TokenlessSendEmailNode
 
 from .agent import (
     AgentNode,
@@ -72,6 +73,7 @@ __all__ = [
     "SendEmailNode", 
     "ConversationContextNode",
     "PostProcessNode",
+    "TokenlessSendEmailNode",
     
     # Agent nodes
     "AgentNode",

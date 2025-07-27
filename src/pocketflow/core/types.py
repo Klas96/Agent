@@ -39,6 +39,7 @@ class SharedState(BaseModel):
     chosen_subtype: Optional[str] = Field(default=None, description="Chosen content subtype")
     chosen_duration: Optional[int] = Field(default=None, description="Chosen content duration")
     reply_body: Optional[str] = Field(default=None, description="Reply body content")
+    payment_info: Optional[Dict[str, Any]] = Field(default=None, description="Payment information")
     out_of_tokens: Optional[bool] = Field(default=None, description="Whether user is out of tokens")
     
     class Config:

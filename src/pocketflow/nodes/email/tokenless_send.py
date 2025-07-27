@@ -1,7 +1,8 @@
 """
-Email sending node for PocketFlow.
+Tokenless user email sending node for PocketFlow.
 
-This module contains the SendEmailNode for sending email responses.
+This module contains the TokenlessSendEmailNode for sending payment request emails
+to users without tokens.
 """
 
 from typing import Dict, Any, Optional
@@ -11,31 +12,16 @@ from ...utils.logging import get_logger
 from ...services.email_service import EmailService
 from ...config.settings import get_settings
 
-logger = get_logger("SendEmailNode")
+logger = get_logger("TokenlessSendEmailNode")
 
-class SendEmailNode(Node):
-    """Node for sending emails based on agent actions."""
+class TokenlessSendEmailNode(Node):
+    """Node for sending payment request emails to tokenless users."""
     
     def prep(self, shared: SharedState):
         """Prepare by getting email service and extracting send parameters."""
         settings = get_settings()
         email_service = EmailService(settings)
         
-        # Extract send parameters from agent action
-        agent_action = shared.agent_action
-        if not agent_action or agent_action.get("action") != "send":
-            logger.error("No send action found in agent_action")
-            return None
-            
-        params = agent_action.get("parameters", {})
-        to = params.get("to")
-        subject = params.get("subject", "")
-        body = params.get("body", "")
-        
-        if not to:
-            logger.error("No recipient email address found")
-            return None
-            
         # Extract sender email from the original email
         email = shared.email
         if not email:
@@ -54,57 +40,62 @@ class SendEmailNode(Node):
         if not sender_email:
             logger.error("Could not extract sender email from: %s", from_field)
             return None
-            
-        # Check if user is trying to email themselves (this is allowed for replies)
-        if to == sender_email:
-            logger.info(f"User {sender_email} is replying to themselves - this is allowed")
-        else:
-            # For emails to other users, validate they exist in the database
-            try:
-                from ..web.routes import get_user_by_email
-                recipient_user = get_user_by_email(to)
-                if not recipient_user:
-                    logger.error(f"Recipient {to} is not a registered user. Blocked.")
-                    return None
-                logger.info(f"Recipient {to} is a registered user - proceeding")
-            except Exception as e:
-                logger.error(f"Error validating recipient {to}: {e}")
-                return None
         
-        return email_service, to, subject, body, params, email
+        # Get agent response from shared state (the main email content)
+        agent_action = shared.agent_action
+        if not agent_action or 'parameters' not in agent_action:
+            logger.error("No agent action found in shared state")
+            return None
+        
+        agent_body = agent_action.get('parameters', {}).get('body', '')
+        if not agent_body:
+            logger.error("No agent response body found in shared state")
+            return None
+        
+        # Get payment info from shared state (set by PurchaseTokensWithBitcoinNode)
+        payment_info = shared.reply_body
+        if not payment_info:
+            logger.error("No payment info found in shared state")
+            return None
+        
+        return email_service, sender_email, agent_body, payment_info, email
     
     def exec(self, prep_result):
-        """Execute by sending the email."""
+        """Execute by sending the payment request email."""
         if not prep_result:
             return None
             
-        email_service, to, subject, body, params, email = prep_result
+        email_service, sender_email, agent_body, payment_info, email = prep_result
         
-        # Set up proper reply headers for email threading
+        # Enhanced threading - use original message ID and include subject context
         original_message_id = email.get("message_id")
         original_references = email.get("references")
+        original_subject = email.get("subject", "")
         
-        # For In-Reply-To, use the original message ID
-        in_reply_to = email.get("in_reply_to") or original_message_id
+        # For In-Reply-To, use the original message ID (this is the key for threading)
+        in_reply_to = original_message_id
         
         # For References, build the proper chain
-        if original_references and original_message_id:
-            # Append the original message_id to existing references
-            # Ensure proper spacing and format
+        # Gmail and most email clients expect References to be a space-separated list
+        if original_references and original_references.strip():
+            # If there are existing references, append the original message ID
             references = f"{original_references} {original_message_id}"
         else:
             # For first reply, References should be the same as In-Reply-To
-            # This is the standard format that most email clients expect
-            references = in_reply_to
+            # This is the standard RFC format that Gmail expects
+            references = original_message_id
         
-        # Debug logging for threading headers
-        logger.info(f"Original email message_id: {email.get('message_id')}")
+        # Log threading details for debugging
+        logger.info(f"Original email message_id: {original_message_id}")
         logger.info(f"Original email in_reply_to: {email.get('in_reply_to')}")
-        logger.info(f"Original email references: {email.get('references')}")
+        logger.info(f"Original email references: {original_references}")
         logger.info(f"Setting In-Reply-To: {in_reply_to}")
         logger.info(f"Setting References: {references}")
         
-        # Modify subject for proper reply threading
+        # Combine agent response with payment info as a note
+        combined_body = f"{agent_body}\n\n---\n\n**Payment Information:**\n{payment_info}"
+        
+        # Subject line for proper threading
         original_subject = email.get("subject", "")
         if original_subject and original_subject.strip():
             # For non-empty subjects, use "Re:" prefix
@@ -122,14 +113,11 @@ class SendEmailNode(Node):
             # For empty subjects (like your original emails), use empty subject for proper threading
             # This matches the format that Gmail expects for threading
             reply_subject = ""
-        
-        # Create email send request
+            
         send_request = EmailSendRequest(
-            to=to,
+            to=sender_email,
             subject=reply_subject,
-            body=body,
-            cc=params.get("cc"),
-            attachment=params.get("attachment"),
+            body=combined_body,
             in_reply_to=in_reply_to,
             references=references
         )
@@ -139,10 +127,10 @@ class SendEmailNode(Node):
         return success
     
     def post(self, shared: SharedState, prep_res, exec_res):
-        """Post-process by logging the result."""
+        """Post-process the email sending result."""
         if exec_res:
-            logger.info("Email sent successfully")
+            logger.info("Payment request email sent successfully")
             return "default"
         else:
-            logger.error("Failed to send email")
-            return "error" 
+            logger.error("Failed to send payment request email")
+            return "send_failed" 

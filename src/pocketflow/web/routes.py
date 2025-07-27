@@ -608,6 +608,20 @@ def api_health():
         add_error("api", f"API health endpoint failed: {e}")
         return jsonify({"success": False, "error": str(e)})
 
+@admin_bp.route("/api/bitcoin/info")
+def api_bitcoin_info():
+    """API endpoint for Bitcoin service information."""
+    try:
+        from ..services.bitcoin_service import BitcoinService
+        bitcoin_service = BitcoinService()
+        
+        info = bitcoin_service.get_service_info()
+        return jsonify({"success": True, "info": info})
+    except Exception as e:
+        logger.error(f"Error in API bitcoin info: {e}")
+        add_error("api", f"API bitcoin info endpoint failed: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
 @admin_bp.route("/api/errors")
 def api_errors():
     """API endpoint for recent errors."""
