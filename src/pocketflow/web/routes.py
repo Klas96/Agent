@@ -531,30 +531,62 @@ def edit_user(email):
             return redirect(url_for("admin.users_list"))
         
         if request.method == "POST":
-            name = request.form.get("name", "").strip() or None
-            personality = request.form.get("personality", "").strip() or None
-            new_tokens = int(request.form.get("tokens", 0))
+            print(f"DEBUG: POST request to edit_user for {email}")
+            print(f"DEBUG: Content-Type: {request.content_type}")
+            print(f"DEBUG: is_json: {request.is_json}")
+            print(f"DEBUG: form data: {dict(request.form)}")
+            
+            # Handle both JSON and form data
+            if request.is_json:
+                data = request.get_json()
+                print(f"DEBUG: JSON data: {data}")
+                name = data.get("name", "").strip() or None
+                personality = data.get("personality", "").strip() or None
+                new_tokens = int(data.get("tokens", 0))
+            else:
+                name = request.form.get("name", "").strip() or None
+                personality = request.form.get("personality", "").strip() or None
+                new_tokens = int(request.form.get("tokens", 0))
+            
+            print(f"DEBUG: Parsed data - name: {name}, personality: {personality}, tokens: {new_tokens}")
             
             if new_tokens < 0:
-                flash("Tokens cannot be negative", "error")
-                return render_template("edit_user.html", user=user)
+                if request.is_json:
+                    return jsonify({"success": False, "error": "Tokens cannot be negative"})
+                else:
+                    flash("Tokens cannot be negative", "error")
+                    return render_template("edit_user.html", user=user)
             
             # Update user with new name, personality and tokens
+            print(f"DEBUG: Calling update_user with email={email}, name={name}, personality={personality}, tokens={new_tokens}")
             if update_user(email, name, personality, new_tokens):
-                flash(f"User {email} updated successfully", "success")
-                return redirect(url_for("admin.user_detail", email=email))
+                if request.is_json:
+                    return jsonify({
+                        "success": True,
+                        "message": f"User {email} updated successfully",
+                        "user": {"email": email, "name": name, "personality": personality, "tokens": new_tokens}
+                    })
+                else:
+                    flash(f"User {email} updated successfully", "success")
+                    return redirect(url_for("admin.user_detail", email=email))
             else:
                 error_msg = f"Failed to update user {email}"
-                flash(error_msg, "error")
                 add_error("user_management", error_msg, f"Email: {email}, New tokens: {new_tokens}")
-                return render_template("edit_user.html", user=user)
+                if request.is_json:
+                    return jsonify({"success": False, "error": error_msg})
+                else:
+                    flash(error_msg, "error")
+                    return render_template("edit_user.html", user=user)
         
         return render_template("edit_user.html", user=user)
     except Exception as e:
         logger.error(f"Error in edit user: {e}")
         add_error("user_edit", f"Failed to edit user {email}: {e}")
-        flash("Error loading user", "error")
-        return redirect(url_for("admin.users_list"))
+        if request.is_json:
+            return jsonify({"success": False, "error": str(e)})
+        else:
+            flash("Error loading user", "error")
+            return redirect(url_for("admin.users_list"))
 
 @admin_bp.route("/users/<email>/delete", methods=["POST"])
 def delete_user_route(email):
