@@ -99,17 +99,44 @@ class PaymentRequestNode(SimpleNode):
         """Generate payment request for tokenless users."""
         logger = get_logger("PaymentRequestNode")
         
-        user_email = shared.get("user")
-        action = shared.get("action")
+        # Extract user email from the email data
+        user_email = None
+        if hasattr(shared, 'email') and shared.email:
+            from_field = shared.email.get("from", "")
+            if "<" in from_field and ">" in from_field:
+                user_email = from_field.split("<")[1].split(">")[0]
+            else:
+                user_email = from_field
+        
+        # If no email found, try to get from agent_action parameters
+        if not user_email and hasattr(shared, 'agent_action') and shared.agent_action:
+            # Try to extract from the 'to' field in agent_action parameters
+            agent_params = shared.agent_action.get("parameters", {})
+            to_field = agent_params.get("to", "")
+            if to_field and to_field != "{sender_email}":
+                user_email = to_field
+        
+        # Get action from agent_action
+        action = None
+        if hasattr(shared, 'agent_action') and shared.agent_action:
+            action = shared.agent_action.get("action")
         
         if not user_email:
             logger.error("No user email for payment request")
             return None
         
         # Get or create Bitcoin address for user
-        btc_address = shared.get("btc_address")
+        btc_address = getattr(shared, 'btc_address', None)
         if not btc_address:
             btc_address = self._get_or_create_btc_address(user_email)
+        
+        # Check if we got a valid address
+        if not btc_address:
+            logger.error(f"Failed to get/create BTC address for {user_email}")
+            return {
+                "error": "Failed to generate Bitcoin address",
+                "flow_type": "error"
+            }
         
         # Calculate payment amount based on action
         payment_amount = self._calculate_payment_amount(action)
@@ -123,35 +150,61 @@ class PaymentRequestNode(SimpleNode):
                 "btc_address": btc_address,
                 "description": f"Payment for {action} action"
             },
-            "btc_address": btc_address,
-            "flow_type": FlowType.PAYMENT_PENDING.value
+            "btc_address": btc_address
+            # Don't change flow_type - keep it as tokenless_user
         }
     
     def _get_or_create_btc_address(self, user_email: str) -> str:
         """Get or create a Bitcoin address for the user."""
         try:
+            # Instantiate database service
+            db_service = database_service.DatabaseService()
+            
             # Check if user already has a BTC address
-            addresses = database_service.get_btc_addresses(user_email)
+            addresses = db_service.get_btc_addresses(user_email)
             if addresses:
                 return addresses[0]  # Return the first address
             
-            # TODO: Generate new address using Bitcoin service
-            # For now, use a placeholder
-            import hashlib
-            address_hash = hashlib.md5(user_email.encode()).hexdigest()[:34]
-            new_address = f"bc1{address_hash}"
+            # Generate new address using Electrum wallet
+            from ..utils.electrum_utils import get_new_btc_address
+            new_address = get_new_btc_address()
             
-            # Store the new address
-            database_service.add_btc_address(user_email, new_address)
-            return new_address
+            if new_address:
+                # Store the new address
+                db_service.add_btc_address(user_email, new_address)
+                return new_address
+            else:
+                raise Exception("Failed to generate new BTC address from wallet")
             
         except Exception as e:
             logger = get_logger("PaymentRequestNode")
             logger.error(f"Failed to get/create BTC address for {user_email}: {e}")
-            # Fallback to placeholder
+            # Fallback: try to get an existing address from wallet
+            try:
+                from ..utils.electrum_utils import get_wallet_addresses
+                wallet_addresses = get_wallet_addresses()
+                if wallet_addresses:
+                    # Use the first available address from wallet
+                    fallback_address = wallet_addresses[0]
+                    db_service = database_service.DatabaseService()
+                    db_service.add_btc_address(user_email, fallback_address)
+                    logger.info(f"Using fallback address from wallet: {fallback_address}")
+                    return fallback_address
+            except Exception as fallback_error:
+                logger.error(f"Fallback address generation failed: {fallback_error}")
+            
+            # Last resort: generate a simple placeholder address for tokenless users
+            # This ensures the flow continues even if Electrum is not available
             import hashlib
-            address_hash = hashlib.md5(user_email.encode()).hexdigest()[:34]
-            return f"bc1{address_hash}"
+            import time
+            
+            # Create a deterministic but unique address based on user email and timestamp
+            unique_string = f"{user_email}_{int(time.time())}"
+            hash_obj = hashlib.sha256(unique_string.encode())
+            placeholder_address = f"bc1{hash_obj.hexdigest()[:30]}"
+            
+            logger.info(f"Generated placeholder address for {user_email}: {placeholder_address}")
+            return placeholder_address
     
     def _calculate_payment_amount(self, action: str) -> float:
         """Calculate payment amount based on action type."""

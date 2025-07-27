@@ -5,10 +5,11 @@ This agent handles Bitcoin payment processing, payment requests, and token
 management for users.
 """
 
+import time
 from typing import Dict, Any, List
 from ..agents.base_agent import BaseAgent, AgentAction, AgentDecision
 from ..core.types import SharedState
-from ..services import payment_service, email_service
+from ..services import BitcoinService, EmailService
 from ..utils.logging import get_logger
 
 
@@ -21,6 +22,8 @@ class PaymentAgent(BaseAgent):
         self.payment_processed = False
         self.payment_details = {}
         self.user_tokens = 0
+        self.bitcoin_service = BitcoinService()
+        self.email_service = EmailService()
     
     def analyze(self, shared: SharedState) -> AgentDecision:
         """Analyze the current state and decide what to do."""
@@ -96,22 +99,18 @@ class PaymentAgent(BaseAgent):
             
             self.logger.info(f"Requesting payment from {user_email}: {amount}")
             
-            # Generate Bitcoin address for payment
-            result = payment_service.generate_payment_address({
-                "user_email": user_email,
-                "amount": amount,
-                "description": "PocketFlow tokens"
-            })
+            # Generate Bitcoin address for payment using BitcoinService
+            btc_address = self.bitcoin_service.get_or_create_address(user_email)
             
-            if not result.get("success"):
+            if not btc_address:
                 return {"success": False, "error": "Failed to generate payment address"}
             
             # Store payment details
             self.payment_details = {
-                "address": result.get("address"),
+                "address": btc_address,
                 "amount": amount,
                 "user_email": user_email,
-                "payment_id": result.get("payment_id")
+                "payment_id": f"pay_{user_email}_{int(time.time())}"
             }
             
             self.payment_requested = True
@@ -188,13 +187,35 @@ The PocketFlow Team
             
             self.logger.info(f"Waiting for payment confirmation: {wait_time}")
             
-            # Check if payment was received
-            payment_status = payment_service.check_payment_status({
-                "user_email": user_email,
-                "payment_id": self.payment_details.get("payment_id")
-            })
-            
-            if payment_status.get("success") and payment_status.get("paid"):
+            # Check if payment was received using BitcoinService
+            payment_id = self.payment_details.get("payment_id")
+            if payment_id in self.bitcoin_service._pending_payments:
+                payment_status = self.bitcoin_service.check_payment_status(payment_id)
+                if payment_status.get("status") == "confirmed":
+                    self.payment_processed = True
+                    self.logger.info("Payment confirmed!")
+                    
+                    return {
+                        "success": True,
+                        "payment_confirmed": True,
+                        "tokens_granted": True
+                    }
+                else:
+                    self.logger.info("Payment not yet confirmed")
+                    
+                    return {
+                        "success": True,
+                        "payment_confirmed": False,
+                        "tokens_granted": False
+                    }
+            else:
+                self.logger.info("Payment not found")
+                
+                return {
+                    "success": True,
+                    "payment_confirmed": False,
+                    "tokens_granted": False
+                }
                 self.payment_processed = True
                 self.logger.info("Payment confirmed!")
                 
@@ -262,7 +283,7 @@ The PocketFlow Team
                 "attachments": []
             }
             
-            result = email_service.send_email(email_response)
+            result = self.email_service.send_email(email_response)
             
             return {"success": result.get("success", False)}
             
@@ -273,13 +294,13 @@ The PocketFlow Team
     def _user_has_tokens(self, user_email: str) -> bool:
         """Check if user has sufficient tokens."""
         try:
-            # Check user's token balance
-            result = payment_service.get_user_tokens({
-                "user_email": user_email
-            })
+            # Check user's token balance using database service
+            from ..services import DatabaseService
+            db_service = DatabaseService()
+            user_info = db_service.get_user(user_email)
             
-            if result.get("success"):
-                self.user_tokens = result.get("tokens", 0)
+            if user_info:
+                self.user_tokens = user_info.get("tokens", 0)
                 return self.user_tokens > 0
             else:
                 return False

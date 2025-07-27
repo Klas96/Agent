@@ -8,12 +8,13 @@ from typing import Dict, Any, Optional
 
 from ..core.flow import Flow, FlowBuilder
 from ..core.types import FlowType, SharedState
-from ..nodes import (
-    FetchEmailNode, ConversationContextNode,
-    AgentNode, PopAgentActionNode,
-    PurchaseTokensWithBitcoinNode, FinishNode
-)
+from ..nodes.email.fetch import FetchEmailNode
+from ..nodes.email.context import ConversationContextNode
+from ..nodes.agent.core import AgentNode
+from ..nodes.agent.actions import PopAgentActionNode
+from ..nodes.user_status import PaymentRequestNode
 from ..nodes.email.tokenless_send import TokenlessSendEmailNode
+from ..nodes import FinishNode
 from ..utils.logging import get_logger
 
 
@@ -31,30 +32,29 @@ class TokenlessUserFlow:
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
                 .add_step("agent", AgentNode("agent"))
                 .add_step("pop_action", PopAgentActionNode("pop_action"))
-                .add_step("payment_request", PurchaseTokensWithBitcoinNode("payment_request"))
+                .add_step("payment_request", PaymentRequestNode("payment_request"))
                 .add_step("send_email", TokenlessSendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
                 .set_start("fetch_email")
                 .add_end_step("finish")
                 # Email fetching routing
-                .add_routing("fetch_email", "no_email", "finish")
+                .add_routing("fetch_email", "finish", "finish")
                 .add_routing("fetch_email", "default", "conversation_context")
                 # Conversation context routing
                 .add_routing("conversation_context", "no_context", "finish")
                 .add_routing("conversation_context", "default", "agent")
-                # Agent routing
-                .add_routing("agent", "finish", "payment_request")  # Changed from "finish" to "payment_request"
+                # Agent routing - go to pop_action to get the next action
+                .add_routing("agent", "finish", "pop_action")
                 .add_routing("agent", "default", "pop_action")
-                # Action routing - redirect content generation to payment
+                # Pop action routing
                 .add_routing("pop_action", "finish", "finish")
-                .add_routing("pop_action", "generate", "payment_request")
-                .add_routing("pop_action", "investigate", "payment_request")
                 .add_routing("pop_action", "send", "payment_request")
+                .add_routing("pop_action", "default", "payment_request")
                 # Payment request routing
-                .add_routing("payment_request", "send", "send_email")
-                .add_routing("payment_request", "default", "finish")
+                .add_routing("payment_request", "default", "send_email")
                 # Email sending routing
                 .add_routing("send_email", "send_failed", "finish")
+                .add_routing("send_email", "error", "agent")  # Go back to agent to try again
                 .add_routing("send_email", "default", "finish")
                 .build())
     
@@ -109,13 +109,14 @@ class TokenlessUserFlow:
                 "email_fetching",
                 "conversation_management",
                 "llm_processing",
-                "payment_requests",
+                "action_management",
+                "bitcoin_address_generation",
                 "email_sending"
             ],
             "restrictions": [
+                "payment_required",
                 "no_content_generation",
-                "no_investigation",
-                "payment_required_for_features"
+                "no_investigation"
             ]
         }
 

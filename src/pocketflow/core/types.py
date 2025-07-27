@@ -41,6 +41,7 @@ class SharedState(BaseModel):
     reply_body: Optional[str] = Field(default=None, description="Reply body content")
     payment_info: Optional[Dict[str, Any]] = Field(default=None, description="Payment information")
     out_of_tokens: Optional[bool] = Field(default=None, description="Whether user is out of tokens")
+    rag_context: Optional[Dict[str, Any]] = Field(default=None, description="RAG context and similar conversations")
     
     class Config:
         arbitrary_types_allowed = True

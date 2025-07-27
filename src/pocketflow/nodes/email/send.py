@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from ...core.node import Node
 from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
+from ...utils.prompt_utils import replace_variables_in_text
 from ...services.email_service import EmailService
 from ...config.settings import get_settings
 
@@ -71,7 +72,13 @@ class SendEmailNode(Node):
                 logger.error(f"Error validating recipient {to}: {e}")
                 return None
         
-        return email_service, to, subject, body, params, email
+        # Replace variables in body and subject
+        body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
+        subject_with_vars_replaced = replace_variables_in_text(subject, shared, sender_email)
+        
+        logger.info(f"Replaced variables in email body and subject for {sender_email}")
+        
+        return email_service, to, subject_with_vars_replaced, body_with_vars_replaced, params, email
     
     def exec(self, prep_result):
         """Execute by sending the email."""
@@ -142,6 +149,26 @@ class SendEmailNode(Node):
         """Post-process by logging the result."""
         if exec_res:
             logger.info("Email sent successfully")
+            
+            # Only mark as replied if the email was sent to the original sender
+            if prep_res:
+                email_service, to, subject, body, params, email = prep_res
+                
+                # Extract original sender email
+                from_field = email.get("from", "")
+                original_sender = None
+                if "<" in from_field and ">" in from_field:
+                    original_sender = from_field.split("<")[1].split(">")[0]
+                else:
+                    original_sender = from_field
+                
+                # Only mark as replied if email was sent to the original sender
+                if original_sender and to == original_sender:
+                    shared.sender_have_gotten_response = True
+                    logger.info(f"Marked that original sender {original_sender} has received a reply")
+                else:
+                    logger.info(f"Email sent to {to} but original sender was {original_sender} - not marking as replied")
+            
             return "default"
         else:
             logger.error("Failed to send email")

@@ -2,7 +2,7 @@
 import os
 import sqlite3
 
-BTC_ADDRESS = 'bc1q7mpa2vcxsmgxamcwe5p4dt9nek2j7t2t57jh27'
+BTC_ADDRESS = 'bc19aaad8cc40b7109eefd6ca1f53f4ecab00'
 
 # List of .db files to search in /opt/pocketflow
 DB_FILES = [
@@ -28,16 +28,26 @@ def search_db(db_path, btc_address):
         return []
 
 def main():
+    print(f"🔍 Searching for BTC address: {BTC_ADDRESS}")
+    print("=" * 50)
+    
     found = False
-    for db in DB_FILES:
-        results = search_db(db, BTC_ADDRESS)
+    for db_path in DB_FILES:
+        print(f"Checking {db_path}...")
+        results = search_db(db_path, BTC_ADDRESS)
         if results:
-            print(f"\n✅ Found in {db}:")
+            print(f"✅ Found in {db_path}:")
             for email, address in results:
-                print(f"  User: {email}\n  Address: {address}")
+                print(f"   Email: {email}")
+                print(f"   Address: {address}")
             found = True
+        else:
+            print(f"   ❌ Not found")
+    
     if not found:
-        print("\n❌ Address not found in any production database.")
+        print(f"\n❌ Address {BTC_ADDRESS} not found in any database.")
+    else:
+        print(f"\n✅ Address {BTC_ADDRESS} is in the wallet database.")
 
 if __name__ == "__main__":
     main() 

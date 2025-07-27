@@ -43,10 +43,13 @@ class BitcoinService:
             
             # Generate a new address
             address = self._generate_address(user_email)
-            self._addresses[user_email] = address
             
-            self.logger.info(f"Generated new address for {user_email}: {address}")
-            return address
+            if address:
+                self._addresses[user_email] = address
+                self.logger.info(f"Generated new address for {user_email}: {address}")
+                return address
+            else:
+                raise BitcoinError("Failed to generate Bitcoin address")
             
         except Exception as e:
             self.logger.error(f"Failed to get/create address for {user_email}: {e}")
@@ -158,11 +161,32 @@ class BitcoinService:
     
     def _generate_address(self, user_email: str) -> str:
         """Generate a Bitcoin address for a user."""
-        # In a real implementation, this would use Electrum or similar
-        # For now, generate a deterministic address based on email
-        email_hash = hashlib.sha256(user_email.encode()).hexdigest()
-        address = f"bc1{email_hash[:34]}"  # Simplified address format
-        return address
+        try:
+            # Use the real Electrum wallet to generate addresses
+            from ..utils.electrum_utils import get_new_btc_address
+            address = get_new_btc_address()
+            
+            if address:
+                self.logger.info(f"Generated real BTC address for {user_email}: {address}")
+                return address
+            else:
+                raise Exception("Failed to generate new BTC address from wallet")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to generate real address for {user_email}: {e}")
+            # Fallback: try to get an existing address from wallet
+            try:
+                from ..utils.electrum_utils import get_wallet_addresses
+                wallet_addresses = get_wallet_addresses()
+                if wallet_addresses:
+                    fallback_address = wallet_addresses[0]
+                    self.logger.info(f"Using fallback address from wallet: {fallback_address}")
+                    return fallback_address
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback address generation failed: {fallback_error}")
+            
+            # Last resort: return None to indicate failure
+            return None
     
     def _generate_payment_id(self, user_email: str) -> str:
         """Generate a unique payment ID."""

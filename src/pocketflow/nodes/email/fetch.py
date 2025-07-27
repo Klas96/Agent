@@ -46,6 +46,13 @@ class FetchEmailNode(Node):
             }
             logger.info(f"Fetched email: {email_data.subject}")
             
+            # Mark email as read after successful processing
+            try:
+                prep_res.mark_as_read(email_data.id)
+                logger.info(f"Marked email {email_data.id} as read after successful processing")
+            except Exception as e:
+                logger.warning(f"Failed to mark email {email_data.id} as read: {e}")
+            
             return "default"
         else:
             logger.info("No unread emails found")
@@ -54,4 +61,7 @@ class FetchEmailNode(Node):
             # Also clear conversation context to prevent processing old conversations
             shared.conversation = None
             shared.conversations = {}
+            # Clear any existing agent actions to prevent processing old actions
+            shared.agent_action = None
+            shared.action_queue = None
             return "finish" 

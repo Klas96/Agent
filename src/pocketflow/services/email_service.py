@@ -104,9 +104,8 @@ class EmailService:
                         if email_data:
                             # Process all emails (no filtering)
                             emails.append(email_data)
-                            # Mark as read immediately to prevent reprocessing
-                            self.mark_as_read(email_id)
-                            self.logger.info(f"Added email {email_id} from {email_data.from_} to processing queue and marked as read")
+                            # Don't mark as read yet - let the flow handle it after successful processing
+                            self.logger.info(f"Added email {email_id} from {email_data.from_} to processing queue")
                             
                     except Exception as e:
                         self.logger.warning(f"Failed to parse email {num}: {e}")
