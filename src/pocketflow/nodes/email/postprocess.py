@@ -79,9 +79,20 @@ class PostProcessNode(Node):
             return False
     
     def post(self, shared: SharedState, prep_res, exec_res):
-        """Post-process by logging the result."""
+        """Post-process by logging the result and marking email as read."""
         if exec_res:
             logger.info("Final response email sent successfully")
+            
+            # Mark the email as read after successful processing
+            if hasattr(shared, 'email') and shared.email and shared.email.get('id'):
+                try:
+                    settings = get_settings()
+                    email_service = EmailService(settings)
+                    email_service.mark_as_read(shared.email['id'])
+                    logger.info(f"Marked email {shared.email['id']} as read after successful processing")
+                except Exception as e:
+                    logger.warning(f"Failed to mark email as read: {e}")
+            
             return "default"
         else:
             logger.error("Failed to send final response email")

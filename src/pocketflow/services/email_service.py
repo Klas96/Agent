@@ -101,6 +101,37 @@ class EmailService:
                         continue
             else:
                 self.logger.info("No unread emails found")
+                
+                # Check for very recent emails (last 2 minutes) that might have been marked as read
+                from datetime import datetime, timedelta
+                two_minutes_ago = (datetime.now() - timedelta(minutes=2)).strftime("%d-%b-%Y")
+                
+                try:
+                    # Search for emails from the last 2 minutes
+                    _, recent_message_numbers = imap_server.search(None, f'SINCE {two_minutes_ago}')
+                    if recent_message_numbers[0]:
+                        recent_emails = recent_message_numbers[0].split()
+                        # Only process the 1 most recent email to avoid spam
+                        for num in recent_emails[-1:]:
+                            email_id = num.decode()
+                            
+                            try:
+                                _, msg_data = imap_server.fetch(num, '(RFC822)')
+                                email_body = msg_data[0][1]
+                                email_message = email.message_from_bytes(email_body)
+                                
+                                # Extract email data
+                                email_data = self._parse_email_message(email_message, email_id)
+                                if email_data and email_data.from_email == "klas0holmgren@gmail.com":
+                                    emails.append(email_data)
+                                    # Mark as read immediately to prevent reprocessing
+                                    self.mark_as_read(email_id)
+                                    self.logger.info(f"Added recent email {email_id} to processing queue and marked as read")
+                            except Exception as e:
+                                self.logger.error(f"Error processing recent email {email_id}: {e}")
+                                continue
+                except Exception as e:
+                    self.logger.error(f"Error checking recent emails: {e}")
             
             self.logger.info(f"Fetched {len(emails)} emails total")
             return emails
@@ -154,8 +185,12 @@ class EmailService:
             msg['Message-ID'] = message_id
             self.logger.info(f"Setting Message-ID header: {message_id}")
             
+            # Add additional headers that some email clients require for threading
+            msg['X-Mailer'] = 'PocketFlow Email Agent'
+            msg['X-Thread-Id'] = request.in_reply_to if request.in_reply_to else message_id
+            
             # Add body
-            msg.attach(MIMEText(request.body, 'plain', 'utf-8'))
+            msg.attach(MIMEText(request.body, 'plain', 'utf8'))
             
             # Add attachment if specified
             if request.attachment:

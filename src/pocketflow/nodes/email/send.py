@@ -23,35 +23,54 @@ class SendEmailNode(Node):
         
         # Extract send parameters from agent action
         agent_action = shared.agent_action
-        if not agent_action or agent_action.get('action') != 'send':
-            logger.warning("No send action found in agent_action")
+        if not agent_action or agent_action.get("action") != "send":
+            logger.error("No send action found in agent_action")
             return None
             
-        params = agent_action.get('parameters', {})
-        to = params.get('to')
-        subject = params.get('subject')  # Don't set default here
-        body = params.get('body', '')
+        params = agent_action.get("parameters", {})
+        to = params.get("to")
+        subject = params.get("subject", "")
+        body = params.get("body", "")
         
         if not to:
             logger.error("No recipient email address found")
             return None
-        
-        # Get email data from shared state
-        email = shared.email if hasattr(shared, 'email') else {}
-        
-        # Create proper subject for replies if not provided by agent
-        if not subject:
-            original_subject = email.get('subject', '')
-            if original_subject:
-                subject = f"Re: {original_subject}"
-            else:
-                subject = "Re: Your email"  # Fallback for empty subjects
-        
-        # Debug logging for subject
-        logger.info(f"Final subject being used: {subject}")
-        logger.info(f"Original email subject: {email.get('subject', '')}")
-        logger.info(f"Agent provided subject: {params.get('subject')}")
             
+        # Extract sender email from the original email
+        email = shared.email
+        if not email:
+            logger.error("No email data found in shared state")
+            return None
+            
+        # Extract sender email from "from" field (e.g., "Klas Holmgren <klas0holmgren@gmail.com>")
+        from_field = email.get("from", "")
+        sender_email = None
+        if "<" in from_field and ">" in from_field:
+            sender_email = from_field.split("<")[1].split(">")[0]
+        else:
+            sender_email = from_field
+            
+        # Validate recipient
+        if not sender_email:
+            logger.error("Could not extract sender email from: %s", from_field)
+            return None
+            
+        # Check if user is trying to email themselves (this is allowed for replies)
+        if to == sender_email:
+            logger.info(f"User {sender_email} is replying to themselves - this is allowed")
+        else:
+            # For emails to other users, validate they exist in the database
+            try:
+                from ..web.routes import get_user_by_email
+                recipient_user = get_user_by_email(to)
+                if not recipient_user:
+                    logger.error(f"Recipient {to} is not a registered user. Blocked.")
+                    return None
+                logger.info(f"Recipient {to} is a registered user - proceeding")
+            except Exception as e:
+                logger.error(f"Error validating recipient {to}: {e}")
+                return None
+        
         return email_service, to, subject, body, params, email
     
     def exec(self, prep_result):
@@ -62,8 +81,28 @@ class SendEmailNode(Node):
         email_service, to, subject, body, params, email = prep_result
         
         # Set up proper reply headers for email threading
-        in_reply_to = email.get("in_reply_to") or email.get("message_id")
-        references = email.get("references") or email.get("message_id")
+        original_message_id = email.get("message_id")
+        original_references = email.get("references")
+        
+        # For In-Reply-To, use the original message ID
+        in_reply_to = email.get("in_reply_to") or original_message_id
+        
+        # For References, build the proper chain
+        if original_references and original_message_id:
+            # Append the original message_id to existing references
+            # Ensure proper spacing and format
+            references = f"{original_references} {original_message_id}"
+        else:
+            # For first reply, References should be the same as In-Reply-To
+            # This is the standard format that most email clients expect
+            references = in_reply_to
+        
+        # Debug logging for threading headers
+        logger.info(f"Original email message_id: {email.get('message_id')}")
+        logger.info(f"Original email in_reply_to: {email.get('in_reply_to')}")
+        logger.info(f"Original email references: {email.get('references')}")
+        logger.info(f"Setting In-Reply-To: {in_reply_to}")
+        logger.info(f"Setting References: {references}")
         
         # Create email send request
         send_request = EmailSendRequest(
