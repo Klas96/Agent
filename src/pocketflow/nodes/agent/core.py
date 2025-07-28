@@ -188,8 +188,11 @@ class AgentNode(SimpleNode):
                 self.logger.info("No actions found, returning finish")
                 return {"route": "finish"}
             
-            self.logger.info("Actions found, returning default route")
-            return {"route": "default"}
+            # Return the first action type as the route
+            first_action = actions[0]
+            action_type = first_action.get("action", "default")
+            self.logger.info(f"First action type: {action_type}, returning as route")
+            return {"route": action_type}
             
         except LLMError as e:
             self.logger.error(f"LLM service error: {e}")
