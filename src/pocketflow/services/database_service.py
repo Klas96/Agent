@@ -32,8 +32,8 @@ class DatabaseService:
             if self.settings.DATABASE_URL.startswith('sqlite:///'):
                 return self.settings.DATABASE_URL.replace('sqlite:///', '')
         
-        # Fallback to default path
-        data_dir = Path("data")
+        # Use absolute path for production
+        data_dir = Path("/opt/pocketflow/data")
         data_dir.mkdir(exist_ok=True)
         return str(data_dir / "pocketflow.db")
     

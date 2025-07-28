@@ -219,7 +219,8 @@ def get_wallet_addresses() -> Optional[list]:
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
             "--wallet", wallet_path,
-            "listaddresses"
+            "listaddresses",
+            "--offline"
         ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
