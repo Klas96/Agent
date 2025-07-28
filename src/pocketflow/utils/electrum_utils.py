@@ -88,7 +88,7 @@ def get_new_btc_address() -> Optional[str]:
         import os
         
         # Get the wallet path - use user_wallet instead of default_wallet
-        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
+        wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
         
         # Run electrum command to create new address
         result = subprocess.run([
@@ -214,7 +214,7 @@ def get_wallet_addresses() -> Optional[list]:
         # Use electrum command to list addresses
         import subprocess
         
-        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
+        wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
         
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
