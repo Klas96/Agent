@@ -224,11 +224,16 @@ def get_wallet_addresses() -> Optional[list]:
         ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
-            addresses = result.stdout.strip().split('\n')
-            # Filter out empty lines
-            addresses = [addr for addr in addresses if addr.strip()]
-            logger.info(f"Found {len(addresses)} addresses in wallet")
-            return addresses
+            # Parse the JSON output
+            import json
+            try:
+                addresses = json.loads(result.stdout.strip())
+                logger.info(f"Found {len(addresses)} addresses in wallet")
+                return addresses
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse wallet addresses JSON: {e}")
+                logger.error(f"Raw output: {result.stdout}")
+                raise BitcoinError(f"Failed to parse wallet addresses JSON: {e}")
         else:
             logger.error(f"Failed to get wallet addresses: {result.stderr}")
             raise BitcoinError(f"Failed to get wallet addresses: {result.stderr}")
