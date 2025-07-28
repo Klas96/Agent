@@ -5,6 +5,7 @@ Electrum utilities for Bitcoin wallet integration.
 import requests
 import subprocess
 import time
+import os
 from typing import Dict, Any, Optional, List
 from src.pocketflow.config.settings import get_settings
 from src.pocketflow.utils.errors import BitcoinError
@@ -84,8 +85,6 @@ def get_new_btc_address() -> Optional[str]:
     
     try:
         # Use offline mode to generate address directly
-        import subprocess
-        import os
         
         # Get the wallet path - use user_wallet instead of default_wallet
         wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
