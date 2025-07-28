@@ -125,18 +125,32 @@ class PaymentRequestNode(SimpleNode):
             logger.error("No user email for payment request")
             return None
         
-        # Get or create Bitcoin address for user
-        btc_address = getattr(shared, 'btc_address', None)
-        if not btc_address:
-            try:
+        # Get or create user and Bitcoin address
+        try:
+            db_service = database_service.DatabaseService()
+            
+            # Get or create user
+            user = db_service.get_user(user_email)
+            if not user:
+                user = db_service.create_user(user_email)
+            
+            # Get or create Bitcoin address for user
+            btc_address = getattr(shared, 'btc_address', None)
+            if not btc_address:
                 btc_address = self._get_or_create_btc_address(user_email)
-            except Exception as e:
-                logger.error(f"Failed to get/create BTC address for {user_email}: {e}")
-                return {
-                    "error": "Bitcoin payment system unavailable - cannot process payment",
-                    "flow_type": "error",
-                    "message": "Payment system is currently unavailable. Please try again later or contact support."
-                }
+            
+            # Save the Bitcoin address to the user's record
+            if btc_address and user:
+                db_service.update_user_btc_address(user['id'], btc_address)
+                logger.info(f"Updated BTC address for user {user_email}: {btc_address}")
+            
+        except Exception as e:
+            logger.error(f"Failed to get/create BTC address for {user_email}: {e}")
+            return {
+                "error": "Bitcoin payment system unavailable - cannot process payment",
+                "flow_type": "error",
+                "message": "Payment system is currently unavailable. Please try again later or contact support."
+            }
         
         # Check if we got a valid address
         if not btc_address:

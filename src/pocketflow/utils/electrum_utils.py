@@ -87,17 +87,16 @@ def get_new_btc_address() -> Optional[str]:
         # Use offline mode to generate address directly
         
         # Get the wallet path - use user_wallet instead of default_wallet
-        wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
+        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
         
         # Run electrum command to create new address
-        env = os.environ.copy()
-        env['ELECTRUM_PATH'] = '/opt/pocketflow/.electrum'
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
+            "-D", "/opt/pocketflow/.electrum",
             "--wallet", wallet_path,
             "createnewaddress",
             "--offline"
-        ], capture_output=True, text=True, timeout=30, env=env)
+        ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
             address = result.stdout.strip()
@@ -214,36 +213,31 @@ def get_wallet_addresses() -> Optional[list]:
     try:
         # Use electrum command to list addresses
         import subprocess
+        import json
         
-        wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
+        # Use the default Electrum data directory in home
+        wallet_path = "/home/pocketflow/.electrum/wallets/user_wallet"
         
-        env = os.environ.copy()
-        env['ELECTRUM_PATH'] = '/opt/pocketflow/.electrum'
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
+            "-D", "/opt/pocketflow/.electrum",
             "--wallet", wallet_path,
             "listaddresses",
             "--offline"
-        ], capture_output=True, text=True, timeout=30, env=env)
+        ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
             # Parse the JSON output
-            import json
-            try:
-                addresses = json.loads(result.stdout.strip())
-                logger.info(f"Found {len(addresses)} addresses in wallet")
-                return addresses
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse wallet addresses JSON: {e}")
-                logger.error(f"Raw output: {result.stdout}")
-                raise BitcoinError(f"Failed to parse wallet addresses JSON: {e}")
+            addresses = json.loads(result.stdout.strip())
+            logger.info(f"Found {len(addresses)} addresses in wallet")
+            return addresses
         else:
-            logger.error(f"Failed to get wallet addresses: {result.stderr}")
-            raise BitcoinError(f"Failed to get wallet addresses: {result.stderr}")
+            logger.error(f"Electrum command failed: {result.stderr}")
+            raise Exception(f"Failed to get wallet addresses: {result.stderr}")
             
     except Exception as e:
         logger.error(f"Failed to get wallet addresses: {e}")
-        raise BitcoinError(f"Failed to get wallet addresses: {e}")
+        raise Exception(f"Failed to get wallet addresses: {e}")
 
 def is_electrum_running() -> bool:
     """

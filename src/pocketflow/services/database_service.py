@@ -46,10 +46,12 @@ class DatabaseService:
             # Create users table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
-                    email TEXT PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
                     name TEXT,
                     personality TEXT,
                     tokens INTEGER DEFAULT 10,
+                    btc_address TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -63,6 +65,30 @@ class DatabaseService:
                     address TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (email) REFERENCES users (email)
+                )
+            ''')
+            
+            # Create address balances table for payment monitoring
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS address_balances (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    address TEXT UNIQUE NOT NULL,
+                    last_balance REAL DEFAULT 0.0,
+                    last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create payment logs table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS payment_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    address TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    tokens_added INTEGER NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
             
@@ -357,4 +383,150 @@ class DatabaseService:
             
         except Exception as e:
             self.logger.error(f"Failed to record payment for {email}: {e}")
+            return False
+    
+    def get_all_users(self) -> List[Dict]:
+        """Get all users with their information."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, email, name, personality, tokens, btc_address, created_at, updated_at
+                FROM users
+            ''')
+            
+            columns = [description[0] for description in cursor.description]
+            users = []
+            
+            for row in cursor.fetchall():
+                user_dict = dict(zip(columns, row))
+                users.append(user_dict)
+            
+            conn.close()
+            return users
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get all users: {e}")
+            return []
+    
+    def add_tokens_to_user(self, user_id: int, tokens_to_add: int) -> int:
+        """Add tokens to a user and return the new balance."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get current balance
+            cursor.execute('SELECT tokens FROM users WHERE id = ?', (user_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                raise Exception(f"User with ID {user_id} not found")
+            
+            current_tokens = result[0]
+            new_balance = current_tokens + tokens_to_add
+            
+            # Update the user's token balance
+            cursor.execute('''
+                UPDATE users 
+                SET tokens = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (new_balance, user_id))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Added {tokens_to_add} tokens to user {user_id}. New balance: {new_balance}")
+            return new_balance
+            
+        except Exception as e:
+            self.logger.error(f"Failed to add tokens to user {user_id}: {e}")
+            raise
+    
+    def get_address_last_balance(self, address: str) -> float:
+        """Get the last known balance for a Bitcoin address."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT last_balance FROM address_balances WHERE address = ?', (address,))
+            result = cursor.fetchone()
+            
+            conn.close()
+            
+            if result:
+                return float(result[0])
+            else:
+                # If no record exists, create one with 0 balance
+                self.update_address_balance(address, 0.0)
+                return 0.0
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get last balance for address {address}: {e}")
+            return 0.0
+    
+    def update_address_balance(self, address: str, balance: float) -> bool:
+        """Update the last known balance for a Bitcoin address."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO address_balances 
+                (address, last_balance, last_checked) 
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (address, balance))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Updated balance for address {address}: {balance}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update balance for address {address}: {e}")
+            return False
+    
+    def log_payment(self, user_id: int, address: str, amount: float, tokens_added: int) -> bool:
+        """Log a payment transaction."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO payment_logs 
+                (user_id, address, amount, tokens_added, timestamp)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, address, amount, tokens_added))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Logged payment: {amount} BTC -> {tokens_added} tokens for user {user_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to log payment for user {user_id}: {e}")
+            return False
+    
+    def update_user_btc_address(self, user_id: int, btc_address: str) -> bool:
+        """Update a user's Bitcoin address."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                UPDATE users 
+                SET btc_address = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (btc_address, user_id))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Updated BTC address for user {user_id}: {btc_address}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update BTC address for user {user_id}: {e}")
             return False 
