@@ -91,12 +91,14 @@ def get_new_btc_address() -> Optional[str]:
         wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
         
         # Run electrum command to create new address
+        env = os.environ.copy()
+        env['ELECTRUM_PATH'] = '/opt/pocketflow/.electrum'
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
             "--wallet", wallet_path,
             "createnewaddress",
             "--offline"
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, timeout=30, env=env)
         
         if result.returncode == 0:
             address = result.stdout.strip()
@@ -216,12 +218,14 @@ def get_wallet_addresses() -> Optional[list]:
         
         wallet_path = "/opt/pocketflow/.electrum/wallets/user_wallet"
         
+        env = os.environ.copy()
+        env['ELECTRUM_PATH'] = '/opt/pocketflow/.electrum'
         result = subprocess.run([
             "/opt/pocketflow/venv/bin/electrum",
             "--wallet", wallet_path,
             "listaddresses",
             "--offline"
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, timeout=30, env=env)
         
         if result.returncode == 0:
             # Parse the JSON output
