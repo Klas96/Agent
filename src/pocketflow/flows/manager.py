@@ -46,26 +46,25 @@ class FlowManager:
             user_email = getattr(shared, 'user', None)
             flow_type = getattr(shared, 'flow_type', None)
             
-            # If no flow_type is set, determine it based on user token status
-            if flow_type is None:
-                if user_email:
-                    # Check user's token status
-                    from ..services import database_service
-                    try:
-                        tokens_remaining = database_service.get_tokens(user_email)
-                        user_has_tokens = tokens_remaining > 0
-                        self.logger.info(f"User {user_email} has {tokens_remaining} tokens")
-                        
-                        if user_has_tokens:
-                            flow_type = FlowType.TOKENED_USER
-                        else:
-                            flow_type = FlowType.TOKENLESS_USER
-                    except Exception as e:
-                        self.logger.error(f"Failed to check tokens for {user_email}: {e}")
-                        flow_type = FlowType.TOKENLESS_USER  # Default to tokenless if check fails
-                else:
-                    # No user email, default to tokenless
-                    flow_type = FlowType.TOKENLESS_USER
+            # Always check user's actual token status, regardless of existing flow_type
+            if user_email:
+                # Check user's token status
+                from ..services import database_service
+                try:
+                    tokens_remaining = database_service.get_tokens(user_email)
+                    user_has_tokens = tokens_remaining > 0
+                    self.logger.info(f"User {user_email} has {tokens_remaining} tokens")
+                    
+                    if user_has_tokens:
+                        flow_type = FlowType.TOKENED_USER
+                    else:
+                        flow_type = FlowType.TOKENLESS_USER
+                except Exception as e:
+                    self.logger.error(f"Failed to check tokens for {user_email}: {e}")
+                    flow_type = FlowType.TOKENLESS_USER  # Default to tokenless if check fails
+            else:
+                # No user email, default to tokenless
+                flow_type = FlowType.TOKENLESS_USER
             
             self.logger.info(f"Selecting flow for user: {user_email}, flow_type: {flow_type}")
             
