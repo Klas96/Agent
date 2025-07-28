@@ -185,8 +185,10 @@ class BitcoinService:
             except Exception as fallback_error:
                 self.logger.error(f"Fallback address generation failed: {fallback_error}")
             
-            # Last resort: return None to indicate failure
-            return None
+            # CRITICAL: Do not generate fake addresses - this is fraudulent
+            # Instead, raise an exception to prevent payment processing
+            self.logger.error(f"Cannot generate real BTC address for {user_email} - payment system unavailable")
+            raise Exception("Bitcoin payment system unavailable - cannot generate real addresses")
     
     def _generate_payment_id(self, user_email: str) -> str:
         """Generate a unique payment ID."""

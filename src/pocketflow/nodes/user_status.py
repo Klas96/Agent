@@ -128,14 +128,23 @@ class PaymentRequestNode(SimpleNode):
         # Get or create Bitcoin address for user
         btc_address = getattr(shared, 'btc_address', None)
         if not btc_address:
-            btc_address = self._get_or_create_btc_address(user_email)
+            try:
+                btc_address = self._get_or_create_btc_address(user_email)
+            except Exception as e:
+                logger.error(f"Failed to get/create BTC address for {user_email}: {e}")
+                return {
+                    "error": "Bitcoin payment system unavailable - cannot process payment",
+                    "flow_type": "error",
+                    "message": "Payment system is currently unavailable. Please try again later or contact support."
+                }
         
         # Check if we got a valid address
         if not btc_address:
             logger.error(f"Failed to get/create BTC address for {user_email}")
             return {
                 "error": "Failed to generate Bitcoin address",
-                "flow_type": "error"
+                "flow_type": "error",
+                "message": "Unable to generate payment address. Please try again later."
             }
         
         # Calculate payment amount based on action
@@ -193,18 +202,10 @@ class PaymentRequestNode(SimpleNode):
             except Exception as fallback_error:
                 logger.error(f"Fallback address generation failed: {fallback_error}")
             
-            # Last resort: generate a simple placeholder address for tokenless users
-            # This ensures the flow continues even if Electrum is not available
-            import hashlib
-            import time
-            
-            # Create a deterministic but unique address based on user email and timestamp
-            unique_string = f"{user_email}_{int(time.time())}"
-            hash_obj = hashlib.sha256(unique_string.encode())
-            placeholder_address = f"bc1{hash_obj.hexdigest()[:30]}"
-            
-            logger.info(f"Generated placeholder address for {user_email}: {placeholder_address}")
-            return placeholder_address
+            # CRITICAL: Do not generate fake addresses - this is fraudulent
+            # Instead, raise an exception to prevent payment processing
+            logger.error(f"Cannot generate real BTC address for {user_email} - payment system unavailable")
+            raise Exception("Bitcoin payment system unavailable - cannot generate real addresses")
     
     def _calculate_payment_amount(self, action: str) -> float:
         """Calculate payment amount based on action type."""
