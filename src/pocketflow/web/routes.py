@@ -133,11 +133,11 @@ def get_db_connection():
     import sqlite3
     from pathlib import Path
     
-    # Try production database first
-    db_path = Path("/opt/pocketflow/data/users.db")
+    # Use the same database as the main application
+    db_path = Path("/opt/pocketflow/data/pocketflow.db")
     if not db_path.exists():
         # Fallback to local development database
-        db_path = Path("data/users.db")
+        db_path = Path("data/pocketflow.db")
         if not db_path.exists():
             # Create local database for development
             db_path.parent.mkdir(exist_ok=True)

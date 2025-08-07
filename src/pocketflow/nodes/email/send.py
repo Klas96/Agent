@@ -62,7 +62,7 @@ class SendEmailNode(Node):
         else:
             # For emails to other users, validate they exist in the database
             try:
-                from ..web.routes import get_user_by_email
+                from ...web.routes import get_user_by_email
                 recipient_user = get_user_by_email(to)
                 if not recipient_user:
                     logger.error(f"Recipient {to} is not a registered user. Blocked.")
@@ -75,6 +75,28 @@ class SendEmailNode(Node):
         # Replace variables in body and subject
         body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
         subject_with_vars_replaced = replace_variables_in_text(subject, shared, sender_email)
+        
+        # Check if there are tool results to include
+        tool_result = getattr(shared, 'tool_result', None)
+        if tool_result:
+            # Format tool results for inclusion in email
+            tool_name = tool_result.get('tool_name', 'Unknown Tool')
+            if 'error' in tool_result:
+                tool_info = f"\n\n**Tool Error:** {tool_result['error']}"
+            else:
+                result = tool_result.get('result', {})
+                if isinstance(result, dict):
+                    # Format structured tool results
+                    tool_info = f"\n\n**Tool Results ({tool_name}):**\n"
+                    for key, value in result.items():
+                        if key != 'api':  # Skip internal API metadata
+                            tool_info += f"- {key}: {value}\n"
+                else:
+                    tool_info = f"\n\n**Tool Results ({tool_name}):**\n{result}\n"
+            
+            # Append tool results to the body
+            body_with_vars_replaced += tool_info
+            logger.info(f"Added tool results from {tool_name} to email body")
         
         logger.info(f"Replaced variables in email body and subject for {sender_email}")
         

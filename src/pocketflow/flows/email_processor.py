@@ -14,6 +14,7 @@ from ..nodes import (
     ContentCreatorNode, ContentParamNode, GenerateContentNode,
     InvestigateTopicNode, FinishNode
 )
+from ..nodes.agent.core import ToolExecutionNode
 from ..utils.logging import get_logger
 
 
@@ -31,6 +32,7 @@ class EmailProcessorFlow:
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
                 .add_step("agent", AgentNode("agent"))
                 .add_step("pop_action", PopAgentActionNode("pop_action"))
+                .add_step("tool_execution", ToolExecutionNode("tool_execution"))
                 .add_step("content_creator", ContentCreatorNode("content_creator"))
                 .add_step("content_params", ContentParamNode("content_params"))
                 .add_step("generate_content", GenerateContentNode("generate_content"))
@@ -40,19 +42,24 @@ class EmailProcessorFlow:
                 .set_start("fetch_email")
                 .add_end_step("finish")
                 # Email fetching routing
-                .add_routing("fetch_email", "no_email", "finish")
+                .add_routing("fetch_email", "finish", "finish")
                 .add_routing("fetch_email", "default", "conversation_context")
                 # Conversation context routing
-                .add_routing("conversation_context", "no_context", "finish")
+                .add_routing("conversation_context", "finish", "finish")
+                .add_routing("conversation_context", "no_email", "finish")
                 .add_routing("conversation_context", "default", "agent")
                 # Agent routing
                 .add_routing("agent", "finish", "finish")
                 .add_routing("agent", "default", "pop_action")
                 # Action routing
                 .add_routing("pop_action", "finish", "finish")
+                .add_routing("pop_action", "use_tool", "tool_execution")
                 .add_routing("pop_action", "generate", "content_creator")
                 .add_routing("pop_action", "investigate", "investigate")
                 .add_routing("pop_action", "send", "send_email")
+                # Tool execution routing
+                .add_routing("tool_execution", "finish", "finish")
+                .add_routing("tool_execution", "send", "send_email")
                 # Content generation routing
                 .add_routing("content_creator", "default", "content_params")
                 .add_routing("content_params", "default", "generate_content")

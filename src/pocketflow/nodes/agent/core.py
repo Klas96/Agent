@@ -15,6 +15,7 @@ from ...utils.logging import get_logger
 from ...utils.errors import LLMError
 from ...utils.prompt_utils import build_system_prompt
 from ...utils.email_utils import extract_email
+from ...tools.registry import agent_tool_registry
 
 
 def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
@@ -105,11 +106,12 @@ def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
         return valid_actions
         
     except json.JSONDecodeError as e:
-        logger.error(f"[extract_all_actions_from_json] JSON parse error: {e}")
-        logger.error(f"[extract_all_actions_from_json] Problematic JSON: {json_str[:500]}...")
+        # Use print for error logging since logger is not available in this function
+        print(f"[extract_all_actions_from_json] JSON parse error: {e}")
+        print(f"[extract_all_actions_from_json] Problematic JSON: {json_str[:500]}...")
         return []
     except Exception as e:
-        logger.error(f"[extract_all_actions_from_json] Unexpected error: {e}")
+        print(f"[extract_all_actions_from_json] Unexpected error: {e}")
         return []
 
 
@@ -246,6 +248,73 @@ class AgentNode(SimpleNode):
             
         except Exception as e:
             self.logger.error(f"Error in _build_messages: {e}")
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            raise 
+            raise e
+
+
+class ToolExecutionNode(SimpleNode):
+    """Node for executing tools based on agent decisions."""
+    
+    def __init__(self, name: str = "tool_execution"):
+        super().__init__(name)
+        self.logger = get_logger("ToolExecutionNode")
+    
+    def process(self, shared: SharedState) -> Dict[str, Any]:
+        """
+        Execute tools based on agent action.
+        
+        Args:
+            shared: Shared state containing tool action
+            
+        Returns:
+            Tool execution result
+        """
+        try:
+            # Get the current agent action
+            agent_action = getattr(shared, 'agent_action', None)
+            if not agent_action or agent_action.get('action') != 'use_tool':
+                self.logger.warning("No use_tool action found in shared state")
+                return {"route": "finish", "error": "No tool action to execute"}
+            
+            # Extract tool information
+            parameters = agent_action.get('parameters', {})
+            tool_name = parameters.get('tool_name')
+            tool_params = parameters.get('parameters', {})
+            
+            if not tool_name:
+                self.logger.error("No tool name specified in use_tool action")
+                return {"route": "finish", "error": "No tool name specified"}
+            
+            self.logger.info(f"Executing tool: {tool_name} with parameters: {tool_params}")
+            
+            # Execute the tool
+            try:
+                tool = agent_tool_registry.get_tool(tool_name)
+                if not tool:
+                    self.logger.error(f"Tool not found: {tool_name}")
+                    return {"route": "finish", "error": f"Tool not found: {tool_name}"}
+                
+                # Execute the tool
+                result = tool.execute(**tool_params)
+                
+                # Store the result in shared state
+                shared.tool_result = {
+                    "tool_name": tool_name,
+                    "parameters": tool_params,
+                    "result": result
+                }
+                
+                self.logger.info(f"Tool execution successful: {tool_name}")
+                return {"route": "send", "tool_result": result}
+                
+            except Exception as e:
+                self.logger.error(f"Tool execution failed: {e}")
+                shared.tool_result = {
+                    "tool_name": tool_name,
+                    "parameters": tool_params,
+                    "error": str(e)
+                }
+                return {"route": "send", "error": f"Tool execution failed: {e}"}
+                
+        except Exception as e:
+            self.logger.error(f"Unexpected error in ToolExecutionNode: {e}")
+            return {"route": "finish", "error": f"Tool execution error: {e}"} 

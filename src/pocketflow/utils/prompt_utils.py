@@ -59,6 +59,15 @@ def build_tokenless_system_prompt(shared, sender_email):
     similar_conversations = rag_context.get('similar_conversations', [])
     user_patterns = rag_context.get('user_patterns', [])
     
+    # Get available tools information
+    tools_info = ""
+    try:
+        from ..tools.registry import agent_tool_registry
+        tools_description = agent_tool_registry.get_available_tools_prompt()
+        tools_info = f"\n\n**AVAILABLE TOOLS:**\n{tools_description}\n\n**TOOL USAGE RULES:**\nYou MUST use tools when users ask about:\n- **Bitcoin/crypto odds or predictions**: ALWAYS use the Polymarket tool first\n- **Calculations**: Use the calculator tool\n- **Weather**: Use the weather tool\n- **Web searches**: Use the web search tool\n- **File operations**: Use file read/write tools\n- **Database queries**: Use the database tool\n- **Prediction markets**: Use the Polymarket tool\n\n**CRITICAL: For Bitcoin odds, crypto predictions, or market odds, you MUST use the Polymarket tool before responding!**\n\nWhen using tools, include them in your action list before sending the response."
+    except Exception as e:
+        logger.warning(f"Could not get tools info: {e}")
+    
     # Build RAG context section
     rag_context_section = ""
     if similar_conversations or user_patterns:
@@ -115,6 +124,7 @@ You can use these variables in your responses - they will be automatically repla
         "**NEVER send to addresses that are not registered users.**\n\n"
         f"{variables_section}\n"
         f"{rag_context_section}\n"
+        f"{tools_info}\n"
         "**VARIABLE USAGE:**\n"
         "You can use variables in the 'body' field like this: {user_name}, {btc_address}, etc.\n"
         "These variables will be automatically replaced with their actual values.\n"
@@ -125,10 +135,22 @@ You can use these variables in your responses - they will be automatically repla
         "3. **Offer guidance** - Let them know about the token system and how to get started\n"
         "4. **Provide information** - Mention that payment details will be included if they want to purchase tokens\n"
         "5. **Be supportive** - Let them know they'll get a personal Bitcoin address if they choose to purchase\n"
-        "6. **Use RAG context** - If similar conversations exist, reference them appropriately\n\n"
+        "6. **Use RAG context** - If similar conversations exist, reference them appropriately\n"
+        "7. **Use tools when needed** - If they ask for specific data (calculations, weather, Bitcoin odds, etc.), use the appropriate tools\n\n"
         "**Available Actions:**\n"
         "- send: Reply to the original sender or send to any registered user with helpful information and optional payment details\n"
+        "- use_tool: Use a specific tool to help answer the user's question (calculations, weather, Bitcoin odds, etc.)\n"
         "- finish: End the conversation\n\n"
+        "**IMPORTANT WORKFLOWS:**\n"
+        "1. **Tool Usage**: If the user asks for calculations, weather, predictions, or data that requires tools:\n"
+        "   - First, a 'use_tool' action with the appropriate tool and parameters.\n"
+        "   - Then, a 'send' action to share the results.\n"
+        "   - End with 'finish'.\n"
+        "2. **Bitcoin/Crypto Odds**: If the user asks about Bitcoin odds, crypto predictions, or market odds:\n"
+        "   - ALWAYS start with a 'use_tool' action using the Polymarket tool.\n"
+        "   - Use action: 'search_markets' with query about Bitcoin/crypto.\n"
+        "   - Then, a 'send' action to share the real prediction market data.\n"
+        "   - End with 'finish'.\n\n"
         "**Response Style:**\n"
         "- Be warm, welcoming, and helpful\n"
         "- Keep responses concise but informative\n"
@@ -173,6 +195,15 @@ def build_tokened_system_prompt(shared, sender_email):
     except Exception as e:
         logger.warning(f"Could not get user info for {sender_email}: {e}")
     
+    # Get available tools information
+    tools_info = ""
+    try:
+        from ..tools.registry import agent_tool_registry
+        tools_description = agent_tool_registry.get_available_tools_prompt()
+        tools_info = f"\n\n**AVAILABLE TOOLS:**\n{tools_description}\n\n**TOOL USAGE RULES:**\nYou MUST use tools when users ask about:\n- **Bitcoin/crypto odds or predictions**: ALWAYS use the Polymarket tool first\n- **Calculations**: Use the calculator tool\n- **Weather**: Use the weather tool\n- **Web searches**: Use the web search tool\n- **File operations**: Use file read/write tools\n- **Database queries**: Use the database tool\n- **Prediction markets**: Use the Polymarket tool\n\n**CRITICAL: For Bitcoin odds, crypto predictions, or market odds, you MUST use the Polymarket tool before responding!**\n\nWhen using tools, include them in your action list before sending the response."
+    except Exception as e:
+        logger.warning(f"Could not get tools info: {e}")
+    
     # Build available variables section
     variables_section = f"""
 **AVAILABLE VARIABLES:**
@@ -203,7 +234,7 @@ You can use these variables in your responses by replacing them with actual valu
         f"You are an email assistant. The sender is: {sender_email}"
         f"{personality_instruction}{token_info}\n\n"
         "Your job is to answer the user's email as helpfully and conversationally as possible."
-        f"\n{variables_section}\n"
+        f"\n{variables_section}{tools_info}\n"
         "**VARIABLE USAGE:**\n"
         "You can use variables in your responses like this: {sender_email}, {user_name}, {btc_address}, etc.\n"
         "These variables will be automatically replaced with their actual values in the next processing step.\n"
@@ -215,28 +246,42 @@ You can use these variables in your responses by replacing them with actual valu
         "\n  - prompt: a description of what to generate"
         "\n  - duration: (optional, in seconds)"
         "\n- investigate: Research a topic or answer a question using web search."
+        "\n- use_tool: Use a specific tool to help answer the user's question."
+        "\n  - tool_name: Name of the tool to use"
+        "\n  - parameters: Tool-specific parameters"
         "\n- finish: End the conversation and trigger a guaranteed response to the sender."
         "\n\n**CRITICAL: For 'send' actions, ALWAYS use the sender's email address as the recipient unless explicitly told otherwise.**"
         "\n\n**IMPORTANT WORKFLOWS:**"
-        "\n1. **Content Generation**: If the user requests content to be sent (e.g., 'generate a song and send it to X'), ALWAYS output a list of actions:"
+        "\n1. **Tool Usage**: If the user asks for calculations, weather, predictions, or data that requires tools:"
+        "\n   - First, a 'use_tool' action with the appropriate tool and parameters."
+        "\n   - Then, a 'send' action to share the results."
+        "\n   - End with 'finish'."
+        "\n\n2. **Bitcoin/Crypto Odds**: If the user asks about Bitcoin odds, crypto predictions, or market odds:"
+        "\n   - ALWAYS start with a 'use_tool' action using the Polymarket tool."
+        "\n   - Use action: 'search_markets' with query about Bitcoin/crypto."
+        "\n   - Then, a 'send' action to share the real prediction market data."
+        "\n   - End with 'finish'."
+        "\n\n3. **Content Generation**: If the user requests content to be sent (e.g., 'generate a song and send it to X'), ALWAYS output a list of actions:"
         "\n   - First, a 'generate' action to create the content."
         "\n   - Then, a 'send' action to send the generated file as an attachment."
         "\n   - Finally, call 'finish' as the last action."
-        "\n\n2. **Investigation + Report**: If the user asks for investigation and a report (e.g., 'investigate what is happening in the world and give me a report'), use this workflow:"
+        "\n\n4. **Investigation + Report**: If the user asks for investigation and a report (e.g., 'investigate what is happening in the world and give me a report'), use this workflow:"
         "\n   - First, an 'investigate' action to research the topic thoroughly."
         "\n   - Then, a 'generate' action with type 'document' to create a report based on the investigation findings."
         "\n   - Finally, a 'send' action to send the report as an attachment."
         "\n   - End with 'finish'."
-        "\n\n3. **Simple Investigation**: If the user just wants information (e.g., 'what is the latest news about AI?'), use:"
+        "\n\n5. **Simple Investigation**: If the user just wants information (e.g., 'what is the latest news about AI?'), use:"
         "\n   - An 'investigate' action to research the topic."
         "\n   - Then a 'send' action to share the findings."
         "\n   - End with 'finish'."
         "\n\nReply ONLY in JSON format, and nothing else. Do NOT add any text before or after the JSON block."
         "\n\n**Examples:**"
+        "\n\n**Tool Usage Example (Calculator):**"
+        "\n```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"calculator\",\n      \"parameters\": {\n        \"expression\": \"2 + 3 * 4\"\n      }\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Hi {user_name}! I calculated 2 + 3 * 4 for you. The result is 14.\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```"
+        "\n\n**Tool Usage Example (Polymarket):**"
+        "\n```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"polymarket\",\n      \"parameters\": {\n        \"action\": \"search_markets\",\n        \"query\": \"Bitcoin $100K\"\n      }\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Hi {user_name}! Here are the current odds for Bitcoin reaching $100K based on Polymarket data...\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```"
         "\n\n**Simple Reply Example:**"
         "\n```json\n[\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Hi {user_name}! Thank you for your email. I'm here to help.\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```"
-        "\n\n**Investigation + Report Example:**"
-        "\n```json\n[\n  {\n    \"action\": \"investigate\",\n    \"parameters\": {\n      \"query\": \"current global economic trends and market conditions\",\n      \"depth\": \"comprehensive\"\n    }\n  },\n  {\n    \"action\": \"generate\",\n    \"parameters\": {\n      \"type\": \"document\",\n      \"prompt\": \"Create a comprehensive business report based on the investigation findings about global economic trends\",\n      \"research_based\": true\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Hi {user_name}! Here's your comprehensive report on global economic trends based on my investigation!\",\n      \"attachment\": \"<generated report file>\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```"
     )
     
     logger.info(f"Built tokened system prompt for {sender_email}")

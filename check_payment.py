@@ -21,8 +21,7 @@ def check_address_balance(address):
             "-D", "/opt/pocketflow/.electrum",
             "--wallet", "/opt/pocketflow/.electrum/wallets/user_wallet",
             "getaddressbalance",
-            address,
-            "--offline"
+            address
         ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
@@ -149,6 +148,11 @@ def main():
                     
                     print(f"New payment detected: {payment_amount} BTC")
                     print(f"Tokens to add: {tokens_to_add}")
+                    
+                    # Give at least 1 token for any payment, or calculate fractional tokens
+                    if tokens_to_add == 0 and payment_amount > 0:
+                        tokens_to_add = 1
+                        print(f"Small payment detected, giving 1 token")
                     
                     if tokens_to_add > 0:
                         # Update user tokens

@@ -12,9 +12,8 @@ from ..core.flow import FlowRouter
 from ..utils.logging import get_logger
 from .email_processor import email_processor_flow
 from .tokenless_user import tokenless_user_flow
-from .content_generation import content_generation_flow
-from .investigation import investigation_flow
 from .payment_processing import payment_processing_flow
+from .tool_flow import ToolFlow
 
 
 class FlowManager:
@@ -25,9 +24,8 @@ class FlowManager:
         self._flows = {
             "email_processor": email_processor_flow,
             "tokenless_user": tokenless_user_flow,
-            "content_generation": content_generation_flow,
-            "investigation": investigation_flow,
-            "payment_processing": payment_processing_flow
+            "payment_processing": payment_processing_flow,
+            "tool_flow": ToolFlow()
         }
         self._router = FlowRouter()
     
@@ -49,9 +47,10 @@ class FlowManager:
             # Always check user's actual token status, regardless of existing flow_type
             if user_email:
                 # Check user's token status
-                from ..services import database_service
+                from ..services.database_service import DatabaseService
                 try:
-                    tokens_remaining = database_service.get_tokens(user_email)
+                    db_service = DatabaseService()
+                    tokens_remaining = db_service.get_tokens(user_email)
                     user_has_tokens = tokens_remaining > 0
                     self.logger.info(f"User {user_email} has {tokens_remaining} tokens")
                     
@@ -74,21 +73,7 @@ class FlowManager:
             elif flow_type == FlowType.PAYMENT_PENDING:
                 return "payment_processing"
             elif flow_type == FlowType.TOKENED_USER:
-                # Check if this is a specialized request
-                email = getattr(shared, 'email', {})
-                body = email.get("body", "").lower() if email else ""
-                
-                # Check for content generation keywords
-                content_keywords = ["generate", "create", "make", "song", "music", "image", "document"]
-                if any(keyword in body for keyword in content_keywords):
-                    return "content_generation"
-                
-                # Check for investigation keywords
-                investigation_keywords = ["research", "investigate", "find", "search", "what is", "how to"]
-                if any(keyword in body for keyword in investigation_keywords):
-                    return "investigation"
-                
-                # Default to full email processor
+                # Let the agent decide when to use tools - no keyword-based routing
                 return "email_processor"
             else:
                 # Default to email processor

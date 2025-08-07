@@ -44,7 +44,11 @@ class FetchEmailNode(Node):
                 'in_reply_to': email_data.in_reply_to,
                 'references': email_data.references
             }
-            logger.info(f"Fetched email: {email_data.subject}")
+            
+            # Extract user email from sender
+            user_email = extract_email(email_data.from_)
+            shared.user = user_email
+            logger.info(f"Fetched email: {email_data.subject} from {user_email}")
             
             # Mark email as read after successful processing
             try:
