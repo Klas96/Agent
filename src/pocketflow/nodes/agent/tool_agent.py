@@ -132,7 +132,8 @@ class ToolAgentNode(SimpleNode):
         """Register all available tools with the registry."""
         from ...tools import (
             WebSearchTool, CalculatorTool, FileReadTool, FileWriteTool,
-            DatabaseQueryTool, WeatherTool, PolymarketTool, EmailSearchTool, EmailSendTool
+            DatabaseQueryTool, WeatherTool, PolymarketTool, EmailSearchTool, EmailSendTool,
+            PodcastifyTool
         )
         
         tools = [
@@ -144,7 +145,8 @@ class ToolAgentNode(SimpleNode):
             WeatherTool(),
             PolymarketTool(),
             EmailSearchTool(),
-            EmailSendTool()
+            EmailSendTool(),
+            PodcastifyTool()
         ]
         
         for tool in tools:
@@ -185,6 +187,9 @@ You are a helpful AI assistant with access to various tools. You can use these t
 2. Decide if you need to use any tools to help answer
 3. If you need tools, specify which ones to use and with what parameters
 4. Provide a helpful response based on the results
+
+### SPECIAL INSTRUCTIONS FOR PODCAST GENERATION
+When users ask for podcast generation (e.g., "make a podcast", "generate a podcast", "create a podcast"), you MUST use the podcastify tool instead of the basic content generation. The podcastify tool creates high-quality podcast episodes with proper structure, script, and audio.
 
 ### RESPONSE FORMAT
 Respond in the following YAML format:
@@ -233,22 +238,23 @@ tools:
       expression: "2 + 3 * 4"
 ```
 
-Example 3 - Using multiple tools:
+Example 3 - Using podcastify for podcast generation:
 ```yaml
 thinking: |
-    The user wants weather information and then a calculation based on it.
+    The user wants a podcast about local LLMs. I should use the podcastify tool to create a high-quality podcast episode.
 
 response: |
-    Let me get the weather and then calculate something for you.
+    I'll create a podcast about local LLMs for you using the podcastify tool.
 
 tools:
-  - name: weather
+  - name: podcastify
     parameters:
-      location: "San Francisco"
-      units: "celsius"
-  - name: calculator
-    parameters:
-      expression: "20 + 5"
+      topic: "Local LLMs and their applications"
+      duration_minutes: 10
+      style: "conversational"
+      target_audience: "general"
+      voice_preference: "professional"
+      output_format: "wav"
 ```
 
 Now, please help the user with their request.

@@ -6,14 +6,11 @@ This flow handles users without tokens, providing payment requests.
 
 from typing import Dict, Any, Optional
 
-from ..core.flow import Flow, FlowBuilder
+from ..core.flow import FlowBuilder, Flow
 from ..core.types import FlowType, SharedState
-from ..nodes.email.fetch import FetchEmailNode
-from ..nodes.email.context import ConversationContextNode
-from ..nodes.agent.core import AgentNode
-from ..nodes.agent.actions import PopAgentActionNode
-from ..nodes.user_status import PaymentRequestNode
-from ..nodes.email.tokenless_send import TokenlessSendEmailNode
+from ..nodes.email import FetchEmailNode, SendEmailNode, ConversationContextNode
+from ..nodes.agent import AgentNode, PopAgentActionNode
+from ..nodes.content import ContentCreatorNode
 from ..nodes import FinishNode
 from ..utils.logging import get_logger
 
@@ -27,35 +24,17 @@ class TokenlessUserFlow:
     
     def _build_flow(self) -> Flow:
         """Build the tokenless user flow."""
-        return (FlowBuilder("tokenless_user", FlowType.TOKENLESS_USER, requires_tokens=False)
+        return (FlowBuilder("user", FlowType.USER, requires_tokens=False)
                 .add_step("fetch_email", FetchEmailNode("fetch_email"))
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
                 .add_step("agent", AgentNode("agent"))
-                .add_step("pop_action", PopAgentActionNode("pop_action"))
-                .add_step("payment_request", PaymentRequestNode("payment_request"))
-                .add_step("send_email", TokenlessSendEmailNode("send_email"))
+                .add_step("pop_agent_action", PopAgentActionNode("pop_agent_action"))
+                .add_step("content_generation", ContentCreatorNode("content_generation"))
+                .add_step("add_donation_footer", self._create_donation_footer_node())
+                .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
                 .set_start("fetch_email")
                 .add_end_step("finish")
-                # Email fetching routing
-                .add_routing("fetch_email", "finish", "finish")
-                .add_routing("fetch_email", "default", "conversation_context")
-                # Conversation context routing
-                .add_routing("conversation_context", "no_context", "finish")
-                .add_routing("conversation_context", "default", "agent")
-                # Agent routing - go to pop_action to get the next action
-                .add_routing("agent", "finish", "pop_action")
-                .add_routing("agent", "default", "pop_action")
-                # Pop action routing
-                .add_routing("pop_action", "finish", "finish")
-                .add_routing("pop_action", "send", "payment_request")
-                .add_routing("pop_action", "default", "payment_request")
-                # Payment request routing
-                .add_routing("payment_request", "default", "send_email")
-                # Email sending routing
-                .add_routing("send_email", "send_failed", "finish")
-                .add_routing("send_email", "error", "agent")  # Go back to agent to try again
-                .add_routing("send_email", "default", "finish")
                 .build())
     
     def run(self, shared: SharedState) -> Dict[str, Any]:
@@ -95,7 +74,7 @@ class TokenlessUserFlow:
         """Get information about the flow."""
         return {
             "name": "tokenless_user",
-            "type": FlowType.TOKENLESS_USER,
+            "type": FlowType.USER,  # Changed from TOKENLESS_USER to USER
             "requires_tokens": False,
             "steps": [
                 "fetch_email",
@@ -119,6 +98,16 @@ class TokenlessUserFlow:
                 "no_investigation"
             ]
         }
+
+    def _create_donation_footer_node(self):
+        """Create the donation footer node."""
+        # Temporarily comment out to debug import issue
+        # from ..nodes.email_footer_donation import SimpleDonationFooterNode
+        # return SimpleDonationFooterNode()
+        
+        # Return a simple placeholder node for now
+        from ..nodes import FinishNode
+        return FinishNode("add_donation_footer")
 
 
 # Global tokenless user flow instance

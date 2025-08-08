@@ -26,9 +26,7 @@ class SharedState(BaseModel):
     conversations: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict, description="All conversations by thread")
     generated_file_path: Optional[str] = Field(default=None, description="Path to last generated file")
     last_error: Optional[str] = Field(default=None, description="Last error message")
-    tokens_remaining: Optional[int] = Field(default=None, description="Remaining tokens for user")
-    btc_address: Optional[str] = Field(default=None, description="User's Bitcoin address")
-    user_has_tokens: Optional[bool] = Field(default=None, description="Whether user has tokens")
+    btc_address: Optional[str] = Field(default=None, description="User's Bitcoin address for donations")
     flow_type: Optional[str] = Field(default=None, description="Type of flow being executed")
     action_queue: Optional[List[Dict[str, Any]]] = Field(default=None, description="Queue of actions to be processed")
     agent_action: Optional[Dict[str, Any]] = Field(default=None, description="Current agent action being processed")
@@ -39,8 +37,8 @@ class SharedState(BaseModel):
     chosen_subtype: Optional[str] = Field(default=None, description="Chosen content subtype")
     chosen_duration: Optional[int] = Field(default=None, description="Chosen content duration")
     reply_body: Optional[str] = Field(default=None, description="Reply body content")
-    payment_info: Optional[Dict[str, Any]] = Field(default=None, description="Payment information")
-    out_of_tokens: Optional[bool] = Field(default=None, description="Whether user is out of tokens")
+    generation_error: Optional[str] = Field(default=None, description="Error message from content generation")
+    donation_info: Optional[Dict[str, Any]] = Field(default=None, description="Donation information")
     rag_context: Optional[Dict[str, Any]] = Field(default=None, description="RAG context and similar conversations")
     
     class Config:
@@ -66,10 +64,8 @@ class ContentType(str, Enum):
 
 
 class FlowType(str, Enum):
-    """Types of flows based on user token status."""
-    TOKENED_USER = "tokened_user"      # User has tokens, full functionality
-    TOKENLESS_USER = "tokenless_user"  # User has no tokens, limited functionality
-    PAYMENT_PENDING = "payment_pending"  # User requested payment, waiting for confirmation
+    """Types of flows based on user status."""
+    USER = "user"  # Single flow type for all users
 
 
 class AgentAction(BaseModel):
@@ -133,7 +129,6 @@ class User(BaseModel):
     email: str = Field(description="User email address")
     name: Optional[str] = Field(default=None, description="User's name")
     personality: Optional[str] = Field(default=None, description="User's AI personality preference")
-    tokens: int = Field(description="Number of tokens available")
     created_at: str = Field(description="When user was created")
     updated_at: str = Field(description="When user was last updated")
 
@@ -146,13 +141,12 @@ class BTCAddress(BaseModel):
     created_at: str = Field(description="When address was created")
 
 
-class PaymentTransaction(BaseModel):
-    """Bitcoin payment transaction."""
+class DonationTransaction(BaseModel):
+    """Bitcoin donation transaction."""
     id: int = Field(description="Transaction ID")
     email: str = Field(description="User email")
     btc_amount: Optional[float] = Field(default=None, description="Amount in BTC")
     usd_amount: Optional[float] = Field(default=None, description="Amount in USD")
-    tokens_credited: int = Field(description="Number of tokens credited")
     tx_id: str = Field(description="Bitcoin transaction ID")
     timestamp: str = Field(description="Transaction timestamp")
     created_at: str = Field(description="When record was created")

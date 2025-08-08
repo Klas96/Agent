@@ -28,16 +28,11 @@ from .investigation import (
     InvestigateTopicNode
 )
 
-from .bitcoin import (
-    PurchaseTokensWithBitcoinNode
-)
-
 from .user_status import (
     UserStatusCheckNode,
     TokenValidationNode,
-    PaymentRequestNode,
     TokenConsumptionNode,
-    FlowTypeRouterNode
+    FlowRoutingNode
 )
 
 from ..core.node import SimpleNode
@@ -88,14 +83,10 @@ __all__ = [
     # Investigation nodes
     "InvestigateTopicNode",
     
-    # Bitcoin nodes
-    "PurchaseTokensWithBitcoinNode",
-    
     # User status nodes
     "UserStatusCheckNode",
     "TokenValidationNode",
-    "PaymentRequestNode",
     "TokenConsumptionNode",
-    "FlowTypeRouterNode",
+    "FlowRoutingNode",
     "FinishNode",
 ] 

@@ -64,47 +64,48 @@ class CoordinatorAgent(BaseAgent):
     def _decide_initial_agent(self, shared: SharedState, flow_type: FlowType, body: str) -> AgentDecision:
         """Decide which agent should handle the initial request."""
         
-        # Tokenless users go to payment agent
-        if flow_type == FlowType.TOKENLESS_USER:
-            self.current_agent = "PaymentAgent"
+        # All users get the same treatment since tokens are deprecated
+        if flow_type == FlowType.USER:
+            # Check for investigation needs
+            investigation_keywords = ["research", "investigate", "find", "search", "what is", "how to", "latest", "current"]
+            if any(keyword in body for keyword in investigation_keywords):
+                self.current_agent = "ResearchAgent"
+                return AgentDecision(
+                    action=AgentAction.INVESTIGATE,
+                    confidence=0.9,
+                    reasoning="Request requires investigation",
+                    parameters={"agent": "ResearchAgent", "topic": body},
+                    next_agent="ResearchAgent"
+                )
+            
+            # Check for content generation
+            content_keywords = ["generate", "create", "make", "song", "music", "image", "document", "write"]
+            if any(keyword in body for keyword in content_keywords):
+                self.current_agent = "ContentAgent"
+                return AgentDecision(
+                    action=AgentAction.GENERATE_CONTENT,
+                    confidence=0.9,
+                    reasoning="Request requires content generation",
+                    parameters={"agent": "ContentAgent", "content_type": "auto_detect"},
+                    next_agent="ContentAgent"
+                )
+            
+            # Default to email agent for general processing
+            self.current_agent = "EmailAgent"
             return AgentDecision(
-                action=AgentAction.REQUEST_PAYMENT,
-                confidence=1.0,
-                reasoning="Tokenless user needs payment",
-                parameters={"agent": "PaymentAgent"},
-                next_agent="PaymentAgent"
+                action=AgentAction.PROCESS_WITH_LLM,
+                confidence=0.8,
+                reasoning="General email processing",
+                parameters={"agent": "EmailAgent"},
+                next_agent="EmailAgent"
             )
         
-        # Check for investigation needs
-        investigation_keywords = ["research", "investigate", "find", "search", "what is", "how to", "latest", "current"]
-        if any(keyword in body for keyword in investigation_keywords):
-            self.current_agent = "ResearchAgent"
-            return AgentDecision(
-                action=AgentAction.INVESTIGATE,
-                confidence=0.9,
-                reasoning="Request requires investigation",
-                parameters={"agent": "ResearchAgent", "topic": body},
-                next_agent="ResearchAgent"
-            )
-        
-        # Check for content generation
-        content_keywords = ["generate", "create", "make", "song", "music", "image", "document", "write"]
-        if any(keyword in body for keyword in content_keywords):
-            self.current_agent = "ContentAgent"
-            return AgentDecision(
-                action=AgentAction.GENERATE_CONTENT,
-                confidence=0.9,
-                reasoning="Request requires content generation",
-                parameters={"agent": "ContentAgent", "content_type": "auto_detect"},
-                next_agent="ContentAgent"
-            )
-        
-        # Default to email agent for general processing
+        # Fallback for any other flow types
         self.current_agent = "EmailAgent"
         return AgentDecision(
             action=AgentAction.PROCESS_WITH_LLM,
-            confidence=0.8,
-            reasoning="General email processing",
+            confidence=0.7,
+            reasoning="Default to email agent",
             parameters={"agent": "EmailAgent"},
             next_agent="EmailAgent"
         )

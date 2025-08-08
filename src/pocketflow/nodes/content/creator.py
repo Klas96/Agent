@@ -30,7 +30,7 @@ class ContentCreatorNode(SimpleNode):
             Processing result with routing information
         """
         try:
-            agent_action = shared.get("agent_action", {})
+            agent_action = getattr(shared, 'agent_action', {}) or {}
             params = agent_action.get("parameters", {})
             
             self.logger.info(f"Processing content creation with params: {params}")

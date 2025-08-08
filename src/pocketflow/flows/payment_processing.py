@@ -6,12 +6,12 @@ This flow handles Bitcoin payment processing and token management.
 
 from typing import Dict, Any, Optional
 
-from ..core.flow import Flow, FlowBuilder
+from ..core.flow import FlowBuilder, Flow
 from ..core.types import FlowType, SharedState
-from ..nodes import (
-    PurchaseTokensWithBitcoinNode,
-    SendEmailNode, FinishNode
-)
+from ..nodes.email import FetchEmailNode, SendEmailNode, ConversationContextNode
+from ..nodes.agent import AgentNode, PopAgentActionNode
+from ..nodes.user_status import PaymentRequestNode
+from ..nodes import FinishNode
 from ..utils.logging import get_logger
 
 
@@ -24,19 +24,16 @@ class PaymentProcessingFlow:
     
     def _build_flow(self) -> Flow:
         """Build the payment processing flow."""
-        return (FlowBuilder("payment_processing", FlowType.PAYMENT_PENDING, requires_tokens=False)
-                .add_step("payment_request", PurchaseTokensWithBitcoinNode("payment_request"))
+        return (FlowBuilder("payment_processing", FlowType.USER, requires_tokens=False)
+                .add_step("fetch_email", FetchEmailNode("fetch_email"))
+                .add_step("conversation_context", ConversationContextNode("conversation_context"))
+                .add_step("agent", AgentNode("agent"))
+                .add_step("pop_agent_action", PopAgentActionNode("pop_agent_action"))
+                .add_step("payment_request", PaymentRequestNode("payment_request"))
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
-                .set_start("payment_request")
-                .add_end_step("send_email")
+                .set_start("fetch_email")
                 .add_end_step("finish")
-                # Payment request routing
-                .add_routing("payment_request", "send", "send_email")
-                .add_routing("payment_request", "default", "finish")
-                # Email sending routing
-                .add_routing("send_email", "send_failed", "finish")
-                .add_routing("send_email", "default", "finish")
                 .build())
     
     def run(self, shared: SharedState) -> Dict[str, Any]:

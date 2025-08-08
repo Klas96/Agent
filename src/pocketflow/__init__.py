@@ -51,10 +51,7 @@ from .nodes import (
     GenerateContentNode,
     
     # Investigation nodes
-    InvestigateTopicNode,
-    
-    # Bitcoin nodes
-    PurchaseTokensWithBitcoinNode
+    InvestigateTopicNode
 )
 
 # Flow imports
@@ -62,8 +59,7 @@ from .flows import (
     EmailProcessorFlow,
     TokenlessUserFlow,
     ContentGenerationFlow,
-    InvestigationFlow,
-    PaymentProcessingFlow
+    InvestigationFlow
 )
 
 from .flows.manager import flow_manager
@@ -187,14 +183,12 @@ __all__ = [
     "ContentParamNode",
     "GenerateContentNode",
     "InvestigateTopicNode",
-    "PurchaseTokensWithBitcoinNode",
     
     # Flows
     "EmailProcessorFlow",
     "TokenlessUserFlow",
     "ContentGenerationFlow",
     "InvestigationFlow",
-    "PaymentProcessingFlow",
     "flow_manager",
     
     # Configuration and utilities

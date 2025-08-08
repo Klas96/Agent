@@ -12,7 +12,7 @@ from ..core.flow import FlowRouter
 from ..utils.logging import get_logger
 from .email_processor import email_processor_flow
 from .tokenless_user import tokenless_user_flow
-from .payment_processing import payment_processing_flow
+from .content_generation import ContentGenerationFlow
 from .tool_flow import ToolFlow
 
 
@@ -24,7 +24,7 @@ class FlowManager:
         self._flows = {
             "email_processor": email_processor_flow,
             "tokenless_user": tokenless_user_flow,
-            "payment_processing": payment_processing_flow,
+            "content_generation": ContentGenerationFlow(),
             "tool_flow": ToolFlow()
         }
         self._router = FlowRouter()
@@ -40,44 +40,38 @@ class FlowManager:
             Name of the selected flow
         """
         try:
-            # Get user email and flow type
+            # Get user email
             user_email = getattr(shared, 'user', None)
-            flow_type = getattr(shared, 'flow_type', None)
             
-            # Always check user's actual token status, regardless of existing flow_type
-            if user_email:
-                # Check user's token status
-                from ..services.database_service import DatabaseService
-                try:
-                    db_service = DatabaseService()
-                    tokens_remaining = db_service.get_tokens(user_email)
-                    user_has_tokens = tokens_remaining > 0
-                    self.logger.info(f"User {user_email} has {tokens_remaining} tokens")
-                    
-                    if user_has_tokens:
-                        flow_type = FlowType.TOKENED_USER
-                    else:
-                        flow_type = FlowType.TOKENLESS_USER
-                except Exception as e:
-                    self.logger.error(f"Failed to check tokens for {user_email}: {e}")
-                    flow_type = FlowType.TOKENLESS_USER  # Default to tokenless if check fails
-            else:
-                # No user email, default to tokenless
-                flow_type = FlowType.TOKENLESS_USER
+            # Check if this is a content generation request
+            email = getattr(shared, 'email', {})
+            body = email.get('body', '').lower() if email else ''
+            
+            self.logger.info(f"Flow selection - Email body: '{body}'")
+            
+            # Content generation keywords
+            content_keywords = [
+                "generate", "create", "make", "song", "music", "image", 
+                "document", "write", "podcast", "audio", "episode"
+            ]
+            
+            # Check if the email contains content generation keywords
+            detected_keywords = [keyword for keyword in content_keywords if keyword in body]
+            if detected_keywords:
+                self.logger.info(f"Content generation request detected for {user_email}")
+                self.logger.info(f"Detected keywords: {detected_keywords}")
+                self.logger.info(f"Auto-selected flow: content_generation")
+                return "content_generation"
+            
+            # Use donation-only approach - tokens system is deprecated
+            # All users get the same flow regardless of token status
+            flow_type = FlowType.USER
             
             self.logger.info(f"Selecting flow for user: {user_email}, flow_type: {flow_type}")
+            self.logger.info(f"Auto-selected flow: email_processor")
             
-            # Select flow based on flow type
-            if flow_type == FlowType.TOKENLESS_USER:
-                return "tokenless_user"
-            elif flow_type == FlowType.PAYMENT_PENDING:
-                return "payment_processing"
-            elif flow_type == FlowType.TOKENED_USER:
-                # Let the agent decide when to use tools - no keyword-based routing
-                return "email_processor"
-            else:
-                # Default to email processor
-                return "email_processor"
+            # Default to email processor flow (donation-based)
+            return "email_processor"
                 
         except Exception as e:
             self.logger.error(f"Error selecting flow: {e}")

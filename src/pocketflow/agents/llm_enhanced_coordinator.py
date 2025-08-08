@@ -66,46 +66,47 @@ class LLMEnhancedCoordinatorAgent(BaseAgent):
     def _llm_decide_initial_agent(self, shared: SharedState, flow_type: FlowType, body: str, subject: str) -> AgentDecision:
         """Use LLM to decide which agent should handle the initial request."""
         
-        # Tokenless users go to payment agent
-        if flow_type == FlowType.TOKENLESS_USER:
-            self.current_agent = "PaymentAgent"
-            return AgentDecision(
-                action=AgentAction.REQUEST_PAYMENT,
-                confidence=1.0,
-                reasoning="Tokenless user needs payment",
-                parameters={"agent": "PaymentAgent"},
-                next_agent="PaymentAgent"
-            )
+        # All users get the same treatment since tokens are deprecated
+        if flow_type == FlowType.USER:
+            # Use LLM to analyze the request
+            llm_decision = self._ask_llm_for_agent_selection(body, subject, shared)
+            
+            # Parse LLM response
+            agent_name = llm_decision.get("agent")
+            reasoning = llm_decision.get("reasoning", "LLM analysis")
+            confidence = llm_decision.get("confidence", 0.8)
+            action = llm_decision.get("action", "process_with_llm")
+            
+            # Validate agent exists
+            if agent_name and agent_name in self.available_agents:
+                self.current_agent = agent_name
+                return AgentDecision(
+                    action=AgentAction(action),
+                    confidence=confidence,
+                    reasoning=reasoning,
+                    parameters={"agent": agent_name, **llm_decision.get("parameters", {})},
+                    next_agent=agent_name
+                )
+            else:
+                # Fallback to email agent
+                self.current_agent = "EmailAgent"
+                return AgentDecision(
+                    action=AgentAction.PROCESS_WITH_LLM,
+                    confidence=0.7,
+                    reasoning="LLM suggested agent not available, using email agent",
+                    parameters={"agent": "EmailAgent"},
+                    next_agent="EmailAgent"
+                )
         
-        # Use LLM to analyze the request
-        llm_decision = self._ask_llm_for_agent_selection(body, subject, shared)
-        
-        # Parse LLM response
-        agent_name = llm_decision.get("agent")
-        reasoning = llm_decision.get("reasoning", "LLM analysis")
-        confidence = llm_decision.get("confidence", 0.8)
-        action = llm_decision.get("action", "process_with_llm")
-        
-        # Validate agent exists
-        if agent_name and agent_name in self.available_agents:
-            self.current_agent = agent_name
-            return AgentDecision(
-                action=AgentAction(action),
-                confidence=confidence,
-                reasoning=reasoning,
-                parameters={"agent": agent_name, **llm_decision.get("parameters", {})},
-                next_agent=agent_name
-            )
-        else:
-            # Fallback to email agent
-            self.current_agent = "EmailAgent"
-            return AgentDecision(
-                action=AgentAction.PROCESS_WITH_LLM,
-                confidence=0.7,
-                reasoning="LLM suggested agent not available, using email agent",
-                parameters={"agent": "EmailAgent"},
-                next_agent="EmailAgent"
-            )
+        # Fallback for any other flow types
+        self.current_agent = "EmailAgent"
+        return AgentDecision(
+            action=AgentAction.PROCESS_WITH_LLM,
+            confidence=0.7,
+            reasoning="Default to email agent",
+            parameters={"agent": "EmailAgent"},
+            next_agent="EmailAgent"
+        )
     
     def _ask_llm_for_agent_selection(self, body: str, subject: str, shared: SharedState) -> Dict[str, Any]:
         """Ask LLM to analyze the request and suggest the best agent."""

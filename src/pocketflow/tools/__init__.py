@@ -13,6 +13,7 @@ from .calculator import CalculatorTool
 from .weather import WeatherTool
 from .polymarket import PolymarketTool
 from .email_tools import EmailSearchTool, EmailSendTool
+from .podcastify import PodcastifyTool
 
 __all__ = [
     'Tool',
@@ -28,5 +29,6 @@ __all__ = [
     'WeatherTool',
     'PolymarketTool',
     'EmailSearchTool',
-    'EmailSendTool'
+    'EmailSendTool',
+    'PodcastifyTool'
 ] 

@@ -246,21 +246,13 @@ class FlowRouter:
         
         self.logger.info(f"Selecting flow for user. Has tokens: {user_has_tokens}, Remaining: {tokens_remaining}")
         
-        # Determine flow type based on user state
-        if user_has_tokens and tokens_remaining > 0:
-            flow_type = FlowType.TOKENED_USER
-        elif not user_has_tokens:
-            flow_type = FlowType.TOKENLESS_USER
-        else:
-            flow_type = FlowType.TOKENLESS_USER  # No tokens remaining
+        # All users get the same flow type
+        flow_type = FlowType.USER
         
         # Find a flow that matches the requirements
         for flow in self.flows.values():
             if flow.config.flow_type == flow_type:
-                if flow_type == FlowType.TOKENED_USER and flow.config.requires_tokens:
-                    return flow
-                elif flow_type == FlowType.TOKENLESS_USER and not flow.config.requires_tokens:
-                    return flow
+                return flow
         
         self.logger.warning(f"No suitable flow found for type: {flow_type}")
         return None
@@ -289,7 +281,7 @@ class FlowRouter:
 class FlowBuilder:
     """Builder pattern for creating flows."""
     
-    def __init__(self, name: str, flow_type: FlowType = FlowType.TOKENED_USER, requires_tokens: bool = True):
+    def __init__(self, name: str, flow_type: FlowType = FlowType.USER, requires_tokens: bool = False):
         self.flow = Flow(name, FlowConfig(
             name=name,
             nodes=[],
@@ -325,6 +317,6 @@ class FlowBuilder:
         return self.flow
 
 
-def create_flow(name: str, flow_type: FlowType = FlowType.TOKENED_USER, requires_tokens: bool = True) -> FlowBuilder:
+def create_flow(name: str, flow_type: FlowType = FlowType.USER, requires_tokens: bool = False) -> FlowBuilder:
     """Create a new flow builder."""
     return FlowBuilder(name, flow_type, requires_tokens) 

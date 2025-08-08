@@ -4,12 +4,13 @@ Tool-enabled flow for PocketFlow.
 This flow allows the agent to use tools to accomplish tasks.
 """
 
-from typing import Dict, Any, List
-from ..core.flow import Flow, FlowBuilder
+from typing import Dict, Any, Optional, List
+
+from ..core.flow import FlowBuilder, Flow
 from ..core.types import FlowType, SharedState
-from ..nodes.agent.tool_agent import ToolAgentNode
-from ..nodes.email.send import SendEmailNode
-from ..nodes.email.context import ConversationContextNode
+from ..nodes.email import FetchEmailNode, SendEmailNode, ConversationContextNode
+from ..nodes.agent import AgentNode, PopAgentActionNode
+from ..nodes.agent.core import ToolExecutionNode
 from ..nodes import FinishNode
 from ..utils.logging import get_logger
 
@@ -24,25 +25,17 @@ class ToolFlow:
         self._flow = self._build_flow()
     
     def _build_flow(self) -> Flow:
-        """Build the tool-enabled flow."""
-        return (FlowBuilder("tool_flow", FlowType.TOKENED_USER, requires_tokens=True)
+        """Build the tool flow."""
+        return (FlowBuilder("tool_flow", FlowType.USER, requires_tokens=False)
+                .add_step("fetch_email", FetchEmailNode("fetch_email"))
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
-                .add_step("tool_agent", ToolAgentNode("tool_agent"))
+                .add_step("agent", AgentNode("agent"))
+                .add_step("pop_agent_action", PopAgentActionNode("pop_agent_action"))
+                .add_step("tool_execution", ToolExecutionNode("tool_execution"))
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
-                .set_start("conversation_context")
+                .set_start("fetch_email")
                 .add_end_step("finish")
-                
-                # Conversation context routing
-                .add_routing("conversation_context", "finish", "finish")
-                .add_routing("conversation_context", "default", "tool_agent")
-                
-                # Tool agent routing
-                .add_routing("tool_agent", "continue_with_tools", "tool_agent")  # Loop back for more tools
-                .add_routing("tool_agent", "default", "send_email")
-                
-                # Send email routing
-                .add_routing("send_email", "default", "finish")
                 .build())
     
     def run(self, shared: SharedState) -> Dict[str, Any]:

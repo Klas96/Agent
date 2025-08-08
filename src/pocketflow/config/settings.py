@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: int = Field(default=60, env="LLM_TIMEOUT")  # 60 seconds
     
     # Content Generation
-    CONTENT_OUTPUT_DIR: str = Field(default="./generated", env="CONTENT_OUTPUT_DIR")
+    CONTENT_OUTPUT_DIR: str = Field(default="/opt/pocketflow/data/generated", env="CONTENT_OUTPUT_DIR")
     MAX_CONTENT_DURATION: int = Field(default=300, env="MAX_CONTENT_DURATION")  # 5 minutes
     
     # Bitcoin Configuration

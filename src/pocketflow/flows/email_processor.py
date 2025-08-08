@@ -10,10 +10,11 @@ from ..core.flow import Flow, FlowBuilder
 from ..core.types import FlowType, SharedState
 from ..nodes import (
     FetchEmailNode, SendEmailNode, ConversationContextNode,
-    AgentNode, PopAgentActionNode,
+    PopAgentActionNode,
     ContentCreatorNode, ContentParamNode, GenerateContentNode,
     InvestigateTopicNode, FinishNode
 )
+from ..nodes.agent.tool_agent import ToolAgentNode
 from ..nodes.agent.core import ToolExecutionNode
 from ..utils.logging import get_logger
 
@@ -27,10 +28,10 @@ class EmailProcessorFlow:
     
     def _build_flow(self) -> Flow:
         """Build the email processing flow."""
-        return (FlowBuilder("email_processor", FlowType.TOKENED_USER, requires_tokens=True)
+        return (FlowBuilder("email_processor", FlowType.USER, requires_tokens=False)
                 .add_step("fetch_email", FetchEmailNode("fetch_email"))
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
-                .add_step("agent", AgentNode("agent"))
+                .add_step("agent", ToolAgentNode("agent"))
                 .add_step("pop_action", PopAgentActionNode("pop_action"))
                 .add_step("tool_execution", ToolExecutionNode("tool_execution"))
                 .add_step("content_creator", ContentCreatorNode("content_creator"))
@@ -63,7 +64,7 @@ class EmailProcessorFlow:
                 # Content generation routing
                 .add_routing("content_creator", "default", "content_params")
                 .add_routing("content_params", "default", "generate_content")
-                .add_routing("generate_content", "generation_failed", "finish")
+                .add_routing("generate_content", "generation_failed", "pop_action")
                 .add_routing("generate_content", "default", "pop_action")
                 # Investigation routing
                 .add_routing("investigate", "default", "pop_action")
@@ -109,8 +110,8 @@ class EmailProcessorFlow:
         """Get information about the flow."""
         return {
             "name": "email_processor",
-            "type": FlowType.TOKENED_USER,
-            "requires_tokens": True,
+            "type": FlowType.USER,
+            "requires_tokens": False,
             "steps": [
                 "fetch_email",
                 "conversation_context", 

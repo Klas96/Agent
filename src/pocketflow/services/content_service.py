@@ -23,13 +23,36 @@ class ContentService:
     def __init__(self):
         self.settings = get_settings()
         self.logger = get_logger("ContentService")
+        self.output_dir = self._determine_output_directory()
         self._ensure_output_directory()
     
+    def _determine_output_directory(self) -> Path:
+        """Determine a writable absolute output directory."""
+        try:
+            cfg_path = Path(self.settings.CONTENT_OUTPUT_DIR)
+            # Prefer absolute path under /opt if provided path is relative
+            if not cfg_path.is_absolute():
+                return Path("/opt/pocketflow/data/generated")
+            return cfg_path
+        except Exception:
+            # Fallback if settings missing or invalid
+            return Path("/opt/pocketflow/data/generated")
+
     def _ensure_output_directory(self):
-        """Ensure the output directory exists."""
-        output_dir = Path(self.settings.CONTENT_OUTPUT_DIR)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        self.logger.info(f"Content output directory: {output_dir}")
+        """Ensure the output directory exists and is writable."""
+        try:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            # Touch a temp file to verify writability
+            test_file = self.output_dir / ".writetest"
+            with open(test_file, "w") as f:
+                f.write("ok")
+            test_file.unlink(missing_ok=True)
+        except Exception as e:
+            # Fallback to /opt path
+            self.logger.warning(f"Primary output dir not writable ({self.output_dir}): {e}. Falling back.")
+            self.output_dir = Path("/opt/pocketflow/data/generated")
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Content output directory: {self.output_dir}")
     
     def generate_content(self, request: ContentGenerationRequest) -> Optional[str]:
         """
@@ -65,52 +88,12 @@ class ContentService:
             raise ContentGenerationError(f"Content generation failed: {e}")
     
     def _generate_sound(self, request: ContentGenerationRequest) -> Optional[str]:
-        """Generate sound content."""
+        """Generate sound content (placeholder, no external deps)."""
         try:
-            # Use audiocraft for sound generation
             output_path = self._get_output_path("sound", "wav")
-            
-            # Create a simple script to generate sound
-            script_content = f"""
-import torch
-from audiocraft.models import MusicGen
-import torchaudio
-
-# Load model
-model = MusicGen.get_pretrained('melody')
-model.set_generation_params(duration={request.duration or 10})
-
-# Generate audio
-wav = model.generate(["{request.prompt}"])
-wav = wav.squeeze(0)
-
-# Save audio
-torchaudio.save("{output_path}", wav, 32000)
-"""
-            
-            # Write script to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(script_content)
-                script_path = f.name
-            
-            # Execute script
-            result = subprocess.run(
-                ['python', script_path],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            
-            # Clean up script
-            os.unlink(script_path)
-            
-            if result.returncode == 0 and os.path.exists(output_path):
-                self.logger.info(f"Sound generated: {output_path}")
-                return output_path
-            else:
-                self.logger.error(f"Sound generation failed: {result.stderr}")
-                return None
-                
+            self._create_placeholder_audio(output_path, request.prompt, request.duration or 10)
+            self.logger.info(f"Sound generated: {output_path}")
+            return output_path
         except Exception as e:
             self.logger.error(f"Sound generation error: {e}")
             return None
@@ -155,7 +138,7 @@ torchaudio.save("{output_path}", wav, 32000)
     def _generate_podcast(self, request: ContentGenerationRequest) -> Optional[str]:
         """Generate podcast content."""
         try:
-            output_path = self._get_output_path("podcast", "mp3")
+            output_path = self._get_output_path("podcast", "wav")
             
             # For now, create a simple audio file
             # TODO: Integrate with podcast generation service
@@ -184,7 +167,7 @@ torchaudio.save("{output_path}", wav, 32000)
         """Get output path for generated content."""
         import uuid
         filename = f"{content_type}_{uuid.uuid4().hex[:8]}.{extension}"
-        return os.path.join(self.settings.CONTENT_OUTPUT_DIR, filename)
+        return str(self.output_dir / filename)
     
     def _create_placeholder_image(self, output_path: str, prompt: str):
         """Create a placeholder image (for testing)."""
@@ -231,26 +214,43 @@ torchaudio.save("{output_path}", wav, 32000)
                 f.write(f"Placeholder image for: {prompt}")
     
     def _create_placeholder_audio(self, output_path: str, prompt: str, duration: int):
-        """Create a placeholder audio file (for testing)."""
+        """Create a placeholder WAV audio file using standard library only."""
         try:
-            # Create a simple sine wave as placeholder
-            import numpy as np
-            import soundfile as sf
-            
-            # Generate a simple tone
+            import wave
+            import struct
+            import math
             sample_rate = 44100
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            frequency = 440  # A4 note
-            audio = 0.3 * np.sin(2 * np.pi * frequency * t)
-            
-            # Save as audio file
-            sf.write(output_path, audio, sample_rate)
-            
+            num_samples = int(sample_rate * max(1, duration))
+            amplitude = 16000
+            base_freq = 220
+            with wave.open(output_path, 'w') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(sample_rate)
+                for n in range(num_samples):
+                    # simple tone with slight modulation based on prompt length
+                    freq = base_freq + (len(prompt) % 200)
+                    value = int(amplitude * math.sin(2 * math.pi * freq * (n / sample_rate)))
+                    wf.writeframesraw(struct.pack('<h', value))
         except Exception as e:
             self.logger.warning(f"Failed to create placeholder audio: {e}")
-            # Create a simple text file as fallback
-            with open(output_path, 'w') as f:
-                f.write(f"Placeholder audio for: {prompt}")
+            # Last-resort: write a small wav header with silence
+            try:
+                import wave
+                import struct
+                sample_rate = 44100
+                num_samples = sample_rate * 1
+                with wave.open(output_path, 'w') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sample_rate)
+                    silence = struct.pack('<h', 0)
+                    for _ in range(num_samples):
+                        wf.writeframesraw(silence)
+            except Exception:
+                # Fallback to text file
+                with open(output_path, 'w') as f:
+                    f.write(f"Placeholder audio for: {prompt}")
     
     def _create_document_content(self, prompt: str) -> str:
         """Create document content based on prompt."""

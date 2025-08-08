@@ -162,33 +162,19 @@ class BitcoinService:
     def _generate_address(self, user_email: str) -> str:
         """Generate a Bitcoin address for a user."""
         try:
-            # Use the real Electrum wallet to generate addresses
-            from ..utils.electrum_utils import get_new_btc_address
-            address = get_new_btc_address()
+            # Use simplified Bitcoin utilities instead of Electrum
+            from ..utils.simple_bitcoin_utils import simple_bitcoin_utils
+            address = simple_bitcoin_utils.get_new_address(user_email)
             
             if address:
-                self.logger.info(f"Generated real BTC address for {user_email}: {address}")
+                self.logger.info(f"Generated BTC address for {user_email}: {address}")
                 return address
             else:
-                raise Exception("Failed to generate new BTC address from wallet")
+                raise Exception("Failed to generate new BTC address")
                 
         except Exception as e:
-            self.logger.error(f"Failed to generate real address for {user_email}: {e}")
-            # Fallback: try to get an existing address from wallet
-            try:
-                from ..utils.electrum_utils import get_wallet_addresses
-                wallet_addresses = get_wallet_addresses()
-                if wallet_addresses:
-                    fallback_address = wallet_addresses[0]
-                    self.logger.info(f"Using fallback address from wallet: {fallback_address}")
-                    return fallback_address
-            except Exception as fallback_error:
-                self.logger.error(f"Fallback address generation failed: {fallback_error}")
-            
-            # CRITICAL: Do not generate fake addresses - this is fraudulent
-            # Instead, raise an exception to prevent payment processing
-            self.logger.error(f"Cannot generate real BTC address for {user_email} - payment system unavailable")
-            raise Exception("Bitcoin payment system unavailable - cannot generate real addresses")
+            self.logger.error(f"Failed to generate address for {user_email}: {e}")
+            raise Exception(f"Bitcoin address generation failed: {e}")
     
     def _generate_payment_id(self, user_email: str) -> str:
         """Generate a unique payment ID."""

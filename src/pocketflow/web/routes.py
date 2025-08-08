@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 import json
 from datetime import datetime, timedelta
 from ..services import database_service
-from ..core.types import User, BTCAddress, PaymentTransaction
+from ..core.types import User, BTCAddress, DonationTransaction
 from ..utils.logging import get_logger
 
 admin_bp = Blueprint("admin", __name__)
@@ -148,7 +148,8 @@ def get_db_connection():
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 email TEXT PRIMARY KEY,
-                tokens INTEGER DEFAULT 10,
+                name TEXT,
+                personality TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -195,30 +196,33 @@ def get_db_connection():
     return sqlite3.connect(str(db_path))
 
 def get_all_users() -> List[Dict[str, Any]]:
-    """Get all users from database."""
+    """Get all users."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT email, name, personality, tokens, created_at, updated_at 
-            FROM users 
+            SELECT email, name, personality, created_at, updated_at
+            FROM users
             ORDER BY created_at DESC
         """)
+        rows = cursor.fetchall()
+        conn.close()
+        
         users = []
-        for row in cursor.fetchall():
+        for row in rows:
             users.append({
                 "email": row[0],
                 "name": row[1],
                 "personality": row[2],
-                "tokens": row[3],
-                "created_at": row[4],
-                "updated_at": row[5]
+                "created_at": row[3],
+                "updated_at": row[4]
             })
-        conn.close()
+        
         return users
     except Exception as e:
-        logger.error(f"Error getting users: {e}")
+        logger.error(f"Error getting all users: {e}")
         return []
+
 
 def get_system_stats() -> Dict[str, Any]:
     """Get system statistics."""
@@ -226,144 +230,69 @@ def get_system_stats() -> Dict[str, Any]:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get user count
-        cursor.execute("SELECT COUNT(*) as count FROM users")
+        # Get total users
+        cursor.execute("SELECT COUNT(*) FROM users")
         total_users = cursor.fetchone()[0]
         
-        # Get total tokens
-        cursor.execute("SELECT COALESCE(SUM(tokens), 0) as total FROM users")
-        total_tokens = cursor.fetchone()[0]
-        
         # Get total payments
-        cursor.execute("SELECT COUNT(*) as count FROM payment_transactions")
+        cursor.execute("SELECT COUNT(*) FROM payment_transactions")
         total_payments = cursor.fetchone()[0]
         
-
+        # Get total BTC received
+        cursor.execute("SELECT COALESCE(SUM(amount_btc), 0) as total FROM payment_transactions")
+        total_btc = cursor.fetchone()[0]
         
         conn.close()
         
         return {
             "total_users": total_users,
-            "total_tokens": total_tokens,
-            "total_payments": total_payments
+            "total_payments": total_payments,
+            "total_btc": total_btc,
+            "status": "operational"
         }
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
         return {
             "total_users": 0,
-            "total_tokens": 0,
-            "total_payments": 0
+            "total_payments": 0,
+            "total_btc": 0,
+            "status": "error"
         }
 
-def add_user(email: str, name: Optional[str] = None, personality: Optional[str] = None, initial_tokens: int = 10, notes: str = "") -> bool:
-    """Add a new user to the database."""
+
+def add_user(email: str, name: Optional[str] = None, personality: Optional[str] = None, notes: str = "") -> bool:
+    """Add a new user."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check if user already exists
-        cursor.execute("SELECT email FROM users WHERE email = ?", (email,))
-        if cursor.fetchone():
-            logger.warning(f"User {email} already exists")
-            conn.close()
-            return False
-        
-        # Add user
         cursor.execute("""
-            INSERT INTO users (email, name, personality, tokens, created_at, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        """, (email, name, personality, initial_tokens))
+            INSERT INTO users (email, name, personality, created_at, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (email, name, personality))
         
         conn.commit()
         conn.close()
         
-        logger.info(f"Successfully added user: {email} with {initial_tokens} tokens")
+        logger.info(f"Successfully added user: {email}")
         return True
     except Exception as e:
         logger.error(f"Error adding user {email}: {e}")
         return False
 
-def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    """Get user by email."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT email, name, personality, tokens, created_at, updated_at 
-            FROM users 
-            WHERE email = ?
-        """, (email,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            return {
-                "email": row[0],
-                "name": row[1],
-                "personality": row[2],
-                "tokens": row[3],
-                "created_at": row[4],
-                "updated_at": row[5]
-            }
-        return None
-    except Exception as e:
-        logger.error(f"Error getting user {email}: {e}")
-        return None
 
-def update_user_tokens(email: str, new_tokens: int) -> bool:
-    """Update user tokens."""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE users 
-            SET tokens = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE email = ?
-        """, (new_tokens, email))
-        
-        if cursor.rowcount == 0:
-            conn.close()
-            return False
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Updated user {email} tokens to {new_tokens}")
-        return True
-    except Exception as e:
-        logger.error(f"Error updating user {email}: {e}")
-        return False
-
-def update_user(email: str, name: Optional[str] = None, personality: Optional[str] = None, new_tokens: Optional[int] = None) -> bool:
-    """Update user name, personality and/or tokens."""
+def update_user(email: str, name: Optional[str] = None, personality: Optional[str] = None) -> bool:
+    """Update user name and/or personality."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        if name is not None and personality is not None and new_tokens is not None:
-            cursor.execute("""
-                UPDATE users 
-                SET name = ?, personality = ?, tokens = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-            """, (name, personality, new_tokens, email))
-        elif name is not None and personality is not None:
+        if name is not None and personality is not None:
             cursor.execute("""
                 UPDATE users 
                 SET name = ?, personality = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE email = ?
             """, (name, personality, email))
-        elif name is not None and new_tokens is not None:
-            cursor.execute("""
-                UPDATE users 
-                SET name = ?, tokens = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-            """, (name, new_tokens, email))
-        elif personality is not None and new_tokens is not None:
-            cursor.execute("""
-                UPDATE users 
-                SET personality = ?, tokens = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-            """, (personality, new_tokens, email))
         elif name is not None:
             cursor.execute("""
                 UPDATE users 
@@ -376,24 +305,14 @@ def update_user(email: str, name: Optional[str] = None, personality: Optional[st
                 SET personality = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE email = ?
             """, (personality, email))
-        elif new_tokens is not None:
-            cursor.execute("""
-                UPDATE users 
-                SET tokens = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-            """, (new_tokens, email))
         else:
-            conn.close()
-            return False
-        
-        if cursor.rowcount == 0:
             conn.close()
             return False
         
         conn.commit()
         conn.close()
         
-        logger.info(f"Updated user {email}")
+        logger.info(f"Successfully updated user: {email}")
         return True
     except Exception as e:
         logger.error(f"Error updating user {email}: {e}")
@@ -467,7 +386,7 @@ def add_user_page():
             return render_template("add_user.html")
         
         # Try to add user
-        if add_user(email, name, personality, initial_tokens, notes):
+        if add_user(email, name, personality, notes):
             flash(f"User {email} added successfully with {initial_tokens} tokens", "success")
             return redirect(url_for("admin.users_list"))
         else:
@@ -559,7 +478,7 @@ def edit_user(email):
             
             # Update user with new name, personality and tokens
             print(f"DEBUG: Calling update_user with email={email}, name={name}, personality={personality}, tokens={new_tokens}")
-            if update_user(email, name, personality, new_tokens):
+            if update_user(email, name, personality):
                 if request.is_json:
                     return jsonify({
                         "success": True,
@@ -706,7 +625,7 @@ def api_add_user():
         if initial_tokens < 0:
             return jsonify({"success": False, "error": "Initial tokens cannot be negative"})
         
-        if add_user(email, name, personality, initial_tokens, notes):
+        if add_user(email, name, personality, notes):
             return jsonify({
                 "success": True, 
                 "message": f"User {email} added successfully",
@@ -776,7 +695,7 @@ def api_update_user(email):
         if tokens < 0:
             return jsonify({"success": False, "error": "Tokens cannot be negative"})
         
-        if update_user(email, name, personality, tokens):
+        if update_user(email, name, personality):
             return jsonify({
                 "success": True,
                 "message": f"User {email} updated successfully",

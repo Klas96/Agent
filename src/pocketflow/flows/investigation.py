@@ -12,7 +12,8 @@ from ..nodes import (
     ConversationContextNode,
     AgentNode, PopAgentActionNode,
     InvestigateTopicNode,
-    SendEmailNode, FinishNode
+    SendEmailNode, FinishNode,
+    FetchEmailNode
 )
 from ..utils.logging import get_logger
 
@@ -26,31 +27,16 @@ class InvestigationFlow:
     
     def _build_flow(self) -> Flow:
         """Build the investigation flow."""
-        return (FlowBuilder("investigation", FlowType.TOKENED_USER, requires_tokens=True)
+        return (FlowBuilder("investigation", FlowType.USER, requires_tokens=False)
+                .add_step("fetch_email", FetchEmailNode("fetch_email"))
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
                 .add_step("agent", AgentNode("agent"))
-                .add_step("pop_action", PopAgentActionNode("pop_action"))
-                .add_step("investigate", InvestigateTopicNode("investigate"))
+                .add_step("pop_agent_action", PopAgentActionNode("pop_agent_action"))
+                .add_step("investigation", InvestigateTopicNode("investigation"))
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
-                .set_start("conversation_context")
-                .add_end_step("send_email")
+                .set_start("fetch_email")
                 .add_end_step("finish")
-                # Conversation context routing
-                .add_routing("conversation_context", "no_context", "finish")
-                .add_routing("conversation_context", "default", "agent")
-                # Agent routing
-                .add_routing("agent", "finish", "finish")
-                .add_routing("agent", "default", "pop_action")
-                # Action routing - focus on investigation
-                .add_routing("pop_action", "finish", "finish")
-                .add_routing("pop_action", "investigate", "investigate")
-                .add_routing("pop_action", "send", "send_email")
-                # Investigation routing
-                .add_routing("investigate", "default", "pop_action")
-                # Email sending routing
-                .add_routing("send_email", "send_failed", "finish")
-                .add_routing("send_email", "default", "pop_action")
                 .build())
     
     def run(self, shared: SharedState) -> Dict[str, Any]:

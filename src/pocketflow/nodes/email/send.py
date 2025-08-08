@@ -56,25 +56,27 @@ class SendEmailNode(Node):
             logger.error("Could not extract sender email from: %s", from_field)
             return None
             
-        # Check if user is trying to email themselves (this is allowed for replies)
-        if to == sender_email:
+        # Replace variables in recipient, body and subject BEFORE validation
+        to_with_vars_replaced = replace_variables_in_text(to, shared, sender_email)
+        body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
+        subject_with_vars_replaced = replace_variables_in_text(subject, shared, sender_email)
+        
+        # Validate recipient AFTER variable replacement
+        if to_with_vars_replaced == sender_email:
             logger.info(f"User {sender_email} is replying to themselves - this is allowed")
         else:
             # For emails to other users, validate they exist in the database
             try:
-                from ...web.routes import get_user_by_email
-                recipient_user = get_user_by_email(to)
+                from ...services.database_service import DatabaseService
+                db_service = DatabaseService()
+                recipient_user = db_service.get_user(to_with_vars_replaced)
                 if not recipient_user:
-                    logger.error(f"Recipient {to} is not a registered user. Blocked.")
+                    logger.error(f"Recipient {to_with_vars_replaced} is not a registered user. Blocked.")
                     return None
-                logger.info(f"Recipient {to} is a registered user - proceeding")
+                logger.info(f"Recipient {to_with_vars_replaced} is a registered user - proceeding")
             except Exception as e:
-                logger.error(f"Error validating recipient {to}: {e}")
+                logger.error(f"Error validating recipient {to_with_vars_replaced}: {e}")
                 return None
-        
-        # Replace variables in body and subject
-        body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
-        subject_with_vars_replaced = replace_variables_in_text(subject, shared, sender_email)
         
         # Check if there are tool results to include
         tool_result = getattr(shared, 'tool_result', None)
@@ -100,14 +102,14 @@ class SendEmailNode(Node):
         
         logger.info(f"Replaced variables in email body and subject for {sender_email}")
         
-        return email_service, to, subject_with_vars_replaced, body_with_vars_replaced, params, email
+        return email_service, to_with_vars_replaced, subject_with_vars_replaced, body_with_vars_replaced, params, email, shared
     
     def exec(self, prep_result):
         """Execute by sending the email."""
         if not prep_result:
             return None
             
-        email_service, to, subject, body, params, email = prep_result
+        email_service, to, subject, body, params, email, shared = prep_result
         
         # Set up proper reply headers for email threading
         original_message_id = email.get("message_id")
@@ -158,7 +160,7 @@ class SendEmailNode(Node):
             subject=reply_subject,
             body=body,
             cc=params.get("cc"),
-            attachment=params.get("attachment"),
+            attachment=params.get("attachment") or getattr(shared, 'attachment', None),
             in_reply_to=in_reply_to,
             references=references
         )
@@ -174,7 +176,7 @@ class SendEmailNode(Node):
             
             # Only mark as replied if the email was sent to the original sender
             if prep_res:
-                email_service, to, subject, body, params, email = prep_res
+                email_service, to, subject, body, params, email, shared = prep_res
                 
                 # Extract original sender email
                 from_field = email.get("from", "")

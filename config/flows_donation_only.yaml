@@ -1,0 +1,42 @@
+# Donation-Only Flow Configuration
+# This file defines the simplified flow for all users with donation support
+
+flows:
+  user_flow:
+    name: "User Flow"
+    description: "Unified flow for all users"
+    flow_type: "user"
+    requires_tokens: false
+    timeout: 300
+    steps:
+      - fetch_email
+      - check_user_status
+      - process_agent
+      - generate_content
+      - add_donation_footer
+      - send_email
+    routing:
+      fetch_email:
+        default: check_user_status
+      check_user_status:
+        default: process_agent
+      process_agent:
+        default: generate_content
+      generate_content:
+        default: add_donation_footer
+      add_donation_footer:
+        default: send_email
+      send_email:
+        default: finish
+
+# Donation amounts (suggested)
+donation_amounts:
+  small: "0.0005 BTC"
+  medium: "0.001 BTC"
+  large: "0.005 BTC"
+
+# Donation messages
+donation_messages:
+  request: "Thank you for using our service! Please consider making a donation to support continued development."
+  thank_you: "Thank you for your donation! Your support helps us continue providing this service."
+  reminder: "If you found this service helpful, please consider making a donation to support its continued development." 
