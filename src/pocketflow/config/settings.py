@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
     OLLAMA_HOST: str = Field(default="localhost", env="OLLAMA_HOST")
     OLLAMA_PORT: int = Field(default=11434, env="OLLAMA_PORT")
-    OLLAMA_MODEL: str = Field(default="llama3:latest", env="OLLAMA_MODEL")
+    OLLAMA_MODEL: str = Field(default="llama3.1:latest", env="OLLAMA_MODEL")
     LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
     LLM_MAX_TOKENS: int = Field(default=4000, env="LLM_MAX_TOKENS")
     LLM_TEMPERATURE: float = Field(default=0.7, env="LLM_TEMPERATURE")

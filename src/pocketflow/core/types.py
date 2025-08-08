@@ -40,6 +40,9 @@ class SharedState(BaseModel):
     generation_error: Optional[str] = Field(default=None, description="Error message from content generation")
     donation_info: Optional[Dict[str, Any]] = Field(default=None, description="Donation information")
     rag_context: Optional[Dict[str, Any]] = Field(default=None, description="RAG context and similar conversations")
+    agent_response: Optional[str] = Field(default=None, description="Agent's response text")
+    tool_results: Optional[List[Dict[str, Any]]] = Field(default=None, description="Results from tool execution")
+    agent_thinking: Optional[str] = Field(default=None, description="Agent's thinking process")
     
     class Config:
         arbitrary_types_allowed = True

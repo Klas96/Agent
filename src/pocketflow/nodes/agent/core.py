@@ -28,6 +28,12 @@ def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
     Returns:
         List of action dictionaries
     """
+    if not response:
+        print("[extract_all_actions_from_json] Empty response")
+        return []
+    
+    json_str = ""
+    
     try:
         # Try to extract the first JSON code block
         match = re.search(r"```json\s*([\s\S]+?)```", response)
@@ -109,10 +115,67 @@ def extract_all_actions_from_json(response: str) -> List[Dict[str, Any]]:
         # Use print for error logging since logger is not available in this function
         print(f"[extract_all_actions_from_json] JSON parse error: {e}")
         print(f"[extract_all_actions_from_json] Problematic JSON: {json_str[:500]}...")
+        
+        # Try to fix common JSON issues
+        fixed_json = _attempt_json_fix(json_str)
+        if fixed_json:
+            try:
+                actions = json.loads(fixed_json)
+                if not isinstance(actions, list):
+                    actions = [actions]
+                valid_actions = []
+                for action in actions:
+                    if isinstance(action, dict) and "action" in action:
+                        valid_actions.append(action)
+                if valid_actions:
+                    print(f"[extract_all_actions_from_json] Successfully fixed JSON, extracted {len(valid_actions)} actions")
+                    return valid_actions
+            except:
+                pass
+        
         return []
     except Exception as e:
         print(f"[extract_all_actions_from_json] Unexpected error: {e}")
         return []
+
+
+def _attempt_json_fix(json_str: str) -> str:
+    """
+    Attempt to fix common JSON formatting issues.
+    
+    Args:
+        json_str: Potentially malformed JSON string
+        
+    Returns:
+        Fixed JSON string or empty string if unfixable
+    """
+    if not json_str:
+        return ""
+    
+    # Remove any text before the first [
+    start_bracket = json_str.find('[')
+    if start_bracket > 0:
+        json_str = json_str[start_bracket:]
+    
+    # Remove any text after the last ]
+    end_bracket = json_str.rfind(']')
+    if end_bracket > 0:
+        json_str = json_str[:end_bracket + 1]
+    
+    # Fix common issues
+    json_str = json_str.replace('}\n{', '},\n{')  # Add missing commas
+    json_str = json_str.replace('}\n  {', '},\n  {')  # Add missing commas with indentation
+    
+    # Fix unquoted keys
+    json_str = re.sub(r'(\s*)(\w+)(\s*):', r'\1"\2"\3:', json_str)
+    
+    # Fix single quotes to double quotes
+    json_str = json_str.replace("'", '"')
+    
+    # Remove trailing commas
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+    
+    return json_str
 
 
 class AgentNode(SimpleNode):
@@ -278,7 +341,8 @@ class ToolExecutionNode(SimpleNode):
             # Extract tool information
             parameters = agent_action.get('parameters', {})
             tool_name = parameters.get('tool_name')
-            tool_params = parameters.get('parameters', {})
+            # Extract tool parameters - they are directly in the parameters field, not nested
+            tool_params = {k: v for k, v in parameters.items() if k != 'tool_name'}
             
             if not tool_name:
                 self.logger.error("No tool name specified in use_tool action")
@@ -297,22 +361,22 @@ class ToolExecutionNode(SimpleNode):
                 result = tool.execute(**tool_params)
                 
                 # Store the result in shared state
-                shared.tool_result = {
+                shared.tool_results = [{
                     "tool_name": tool_name,
                     "parameters": tool_params,
                     "result": result
-                }
+                }]
                 
                 self.logger.info(f"Tool execution successful: {tool_name}")
                 return {"route": "send", "tool_result": result}
                 
             except Exception as e:
                 self.logger.error(f"Tool execution failed: {e}")
-                shared.tool_result = {
+                shared.tool_results = [{
                     "tool_name": tool_name,
                     "parameters": tool_params,
                     "error": str(e)
-                }
+                }]
                 return {"route": "send", "error": f"Tool execution failed: {e}"}
                 
         except Exception as e:

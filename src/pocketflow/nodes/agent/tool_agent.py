@@ -8,125 +8,168 @@ import json
 import yaml
 from typing import Dict, Any, List, Optional
 from ...core.node import SimpleNode
-from ...core.types import SharedState, NodeResult
+from ...core.types import SharedState
 from ...services.llm_service import LLMService
 from ...utils.logging import get_logger
-from ...tools import agent_tool_registry
-from ...tools.base import ToolResult
+from ...tools.registry import agent_tool_registry
+from ..agent.core import extract_all_actions_from_json
+from ...utils.email_utils import extract_email
 
 
 class ToolAgentNode(SimpleNode):
-    """
-    Agent node that can use tools to accomplish tasks.
-    """
+    """Node for LLM agent interactions with tool access."""
     
     def __init__(self, name: str = "tool_agent"):
         super().__init__(name)
         self.logger = get_logger("ToolAgentNode")
         self.llm_service = LLMService()
-        
-        # Register available tools
         self._register_tools()
     
-    def prep(self, shared: SharedState) -> Dict[str, Any]:
+    def process(self, shared: SharedState) -> Dict[str, Any]:
         """
-        Prepare the agent with context and available tools.
+        Process user request through LLM and extract actions.
         
         Args:
-            shared: Shared state containing user input and context
+            shared: Shared state containing email and conversation context
             
         Returns:
-            Dict containing user input, context, and available tools
+            Processing result with routing information
         """
-        user_input = shared.get("user_input", "")
-        context = shared.get("context", "")
-        user_email = shared.get("user", "")
-        
-        # Get available tools
-        available_tools = agent_tool_registry.list_tools()
-        
-        return {
-            "user_input": user_input,
-            "context": context,
-            "user_email": user_email,
-            "available_tools": available_tools
-        }
+        try:
+            self.logger.info("Processing tool-enabled agent request...")
+            
+            # Build messages for LLM
+            messages = self._build_messages(shared)
+            
+            if not messages:
+                self.logger.warning("No messages to send to LLM")
+                return {"route": "finish", "error": "No conversation context"}
+            
+            # Call LLM service
+            response = self.llm_service.call_llm(messages)
+            self.logger.info(f"LLM response received: {response[:100]}...")
+            
+            # Extract actions from response
+            actions = extract_all_actions_from_json(response or "")
+            self.logger.info(f"Extracted actions: {actions}")
+            
+            # Validate actions
+            valid = (
+                isinstance(actions, list) and
+                all(isinstance(a, dict) and "action" in a for a in actions)
+            )
+            
+            self.logger.info(f"Actions valid: {valid}, actions count: {len(actions) if isinstance(actions, list) else 0}")
+            
+            if not valid:
+                self.logger.warning("Invalid actions extracted from LLM response")
+                return {"route": "finish", "error": "Invalid LLM response format"}
+            
+            # Store actions in shared state
+            shared.action_queue = actions[:]
+            
+            self.logger.info(f"Extracted {len(actions)} actions from LLM response")
+            
+            if not actions:
+                self.logger.info("No actions found, returning finish")
+                return {"route": "finish"}
+            
+            # Return the first action type as the route
+            first_action = actions[0]
+            action_type = first_action.get("action", "default")
+            self.logger.info(f"First action type: {action_type}, returning as route")
+            return {"route": action_type}
+            
+        except Exception as e:
+            self.logger.error(f"Unexpected error in ToolAgentNode: {e}")
+            return {"route": "finish", "error": f"Tool agent error: {e}"}
     
-    def exec(self, prep_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_messages(self, shared: SharedState) -> List[Dict[str, str]]:
         """
-        Execute the tool-enabled agent.
+        Build messages for LLM based on context with tool information.
         
         Args:
-            prep_result: Prepared data from prep()
+            shared: Shared state containing context
             
         Returns:
-            Dict containing agent response and tool usage
+            List of message dictionaries
         """
-        user_input = prep_result["user_input"]
-        context = prep_result["context"]
-        user_email = prep_result["user_email"]
-        available_tools = prep_result["available_tools"]
+        self.logger.info("_build_messages called")
         
-        # Generate the agent prompt
-        prompt = self._generate_agent_prompt(user_input, context, user_email, available_tools)
-        
-        # Get agent response
-        messages = [{"role": "user", "content": prompt}]
-        agent_response = self.llm_service.call_llm(messages)
-        
-        # Parse the response to extract tool usage
-        parsed_response = self._parse_agent_response(agent_response)
-        
-        # Execute tools if requested
-        tool_results = []
-        if parsed_response.get("tools"):
-            tool_results = self._execute_tools(parsed_response["tools"])
-        
-        return {
-            "response": parsed_response.get("response", agent_response),
-            "tools_used": tool_results,
-            "thinking": parsed_response.get("thinking", "")
-        }
+        try:
+            messages = []
+            
+            # Get email and user info
+            email = shared.email or {}
+            sender = email.get("from") or shared.user or "unknown"
+            sender_email = extract_email(sender).strip().lower() if sender else "unknown"
+            
+            self.logger.info(f"Extracted sender_email: {sender_email}")
+            
+            # Use the system prompt with tool information
+            system_prompt = self._build_system_prompt_with_tools(shared, sender_email)
+            messages.append({"role": "system", "content": system_prompt})
+            
+            # Add conversation history
+            conversation = shared.conversation or []
+            if conversation:
+                for msg in conversation:
+                    messages.append(msg)
+            
+            # Add current email if not already in conversation
+            if email and email.get("body"):
+                current_message = {
+                    "role": "user",
+                    "content": email.get("body", "")
+                }
+                messages.append(current_message)
+            
+            self.logger.info(f"_build_messages completed, returning {len(messages)} messages")
+            return messages
+            
+        except Exception as e:
+            self.logger.error(f"Error in _build_messages: {e}")
+            raise e
     
-    def process(self, shared: SharedState) -> Optional[Dict[str, Any]]:
+    def _build_system_prompt_with_tools(self, shared: SharedState, sender_email: str) -> str:
         """
-        Process the shared state and return any additional data.
+        Build system prompt with tool information.
         
         Args:
             shared: Shared state
+            sender_email: Sender's email address
             
         Returns:
-            Optional dict with additional data
+            System prompt with tool information
         """
-        # This method is required by SimpleNode but not used in our implementation
-        return None
-    
-    def post(self, shared: SharedState, prep_result: Dict[str, Any], exec_result: Dict[str, Any]) -> str:
-        """
-        Process the agent's response and tool results.
+        from ...utils.prompt_utils import build_system_prompt
         
-        Args:
-            shared: Shared state
-            prep_result: Data from prep()
-            exec_result: Data from exec()
-            
-        Returns:
-            Action to take next
-        """
-        response = exec_result["response"]
-        tools_used = exec_result["tools_used"]
-        thinking = exec_result["thinking"]
+        # Get the base system prompt
+        base_prompt = build_system_prompt(shared, sender_email)
         
-        # Store results in shared state
-        shared["agent_response"] = response
-        shared["tool_results"] = tools_used
-        shared["agent_thinking"] = thinking
+        # Add tool information
+        tools_description = agent_tool_registry.get_available_tools_prompt()
         
-        # If tools were used, we might want to continue processing
-        if tools_used:
-            return "continue_with_tools"
-        else:
-            return "default"
+        tool_prompt = f"""
+{tools_description}
+
+**AVAILABLE TOOLS:**
+You have access to the following tools:
+{tools_description}
+
+**TOOL USAGE RULES:**
+You MUST use tools when users ask about:
+- **Calculations**: Use the calculator tool
+- **Weather**: Use the weather tool  
+- **Web searches**: Use the web search tool
+- **File operations**: Use file read/write tools
+- **Database queries**: Use the database tool
+- **Podcast generation**: Use the podcastify tool for high-quality podcast creation
+
+When using tools, include them in your action list before sending the response.
+"""
+        
+        return base_prompt + tool_prompt
     
     def _register_tools(self) -> None:
         """Register all available tools with the registry."""
