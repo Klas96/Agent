@@ -165,15 +165,7 @@ def get_db_connection():
             )
             ''')
             
-            # Create greenlist table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS greenlist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email_or_domain TEXT NOT NULL UNIQUE,
-                type TEXT NOT NULL CHECK(type IN ('email', 'domain')),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            ''')
+
             
             conn.commit()
             conn.close()
@@ -201,13 +193,42 @@ def get_all_users() -> List[Dict[str, Any]]:
                 "name": row[1],
                 "personality": row[2],
                 "created_at": row[3],
-                "updated_at": row[4]
+                "updated_at": row[4],
+                "tokens": 0  # Add tokens field for compatibility with templates
             })
         
         return users
     except Exception as e:
         logger.error(f"Error getting all users: {e}")
         return []
+
+
+def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """Get user by email."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT email, name, personality, created_at, updated_at
+            FROM users WHERE email = ?
+        """, (email,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return {
+                "email": result[0],
+                "name": result[1],
+                "personality": result[2],
+                "created_at": result[3],
+                "updated_at": result[4],
+                "tokens": 0  # Add tokens field for compatibility with templates
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting user {email}: {e}")
+        return None
 
 
 def get_system_stats() -> Dict[str, Any]:

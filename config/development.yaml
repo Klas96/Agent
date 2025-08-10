@@ -68,7 +68,6 @@ flow:
   parallel_execution: false
 
 security:
-  greenlist_file: greenlist.yaml
   allowed_domains:
     - gmail.com
     - outlook.com

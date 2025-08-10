@@ -54,7 +54,6 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = Field(default=3, env="MAX_RETRIES")
     
     # Security
-    GREENLIST_FILE: str = Field(default="greenlist.yaml", env="GREENLIST_FILE")
     TOKEN_PRICE_USD: float = Field(default=0.01, env="TOKEN_PRICE_USD")
     
     # Flask Configuration

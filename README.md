@@ -118,7 +118,6 @@ PocketFlow/
 - **Bitcoin Integration**: Direct Bitcoin payment processing via Electrum
 - **Token Management**: User token tracking and management
 - **Payment Verification**: Automated payment confirmation
-- **Greenlist System**: Whitelist management for trusted users
 
 ### 🖥️ Web Control Panel
 - **Admin Dashboard**: Comprehensive system monitoring

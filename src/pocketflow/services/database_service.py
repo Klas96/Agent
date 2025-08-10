@@ -55,15 +55,7 @@ class DatabaseService:
                 )
             ''')
             
-            # Create greenlist table (for email filtering)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS greenlist (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    email TEXT,
-                    domain TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+
             
             conn.commit()
             conn.close()
@@ -173,70 +165,4 @@ class DatabaseService:
             self.logger.error(f"Failed to update personality for {email}: {e}")
             return False
     
-    def is_greenlisted_email(self, email: str) -> bool:
-        """Check if an email is in the greenlist."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT 1 FROM greenlist WHERE email = ?', (email,))
-            result = cursor.fetchone()
-            
-            conn.close()
-            return result is not None
-            
-        except Exception as e:
-            self.logger.error(f"Failed to check greenlist for {email}: {e}")
-            return False
-    
-    def is_greenlisted_domain(self, domain: str) -> bool:
-        """Check if a domain is in the greenlist."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT 1 FROM greenlist WHERE domain = ?', (domain,))
-            result = cursor.fetchone()
-            
-            conn.close()
-            return result is not None
-            
-        except Exception as e:
-            self.logger.error(f"Failed to check greenlist for domain {domain}: {e}")
-            return False
-    
-    def add_greenlist_email(self, email: str) -> bool:
-        """Add an email to the greenlist."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('INSERT OR IGNORE INTO greenlist (email) VALUES (?)', (email,))
-            
-            conn.commit()
-            conn.close()
-            
-            self.logger.info(f"Added {email} to greenlist")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to add {email} to greenlist: {e}")
-            return False
-    
-    def add_greenlist_domain(self, domain: str) -> bool:
-        """Add a domain to the greenlist."""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('INSERT OR IGNORE INTO greenlist (domain) VALUES (?)', (domain,))
-            
-            conn.commit()
-            conn.close()
-            
-            self.logger.info(f"Added domain {domain} to greenlist")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to add domain {domain} to greenlist: {e}")
-            return False 
+ 

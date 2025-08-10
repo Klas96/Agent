@@ -77,7 +77,6 @@ class FlowConfig(BaseModel):
 
 class SecurityConfig(BaseModel):
     """Security configuration."""
-    greenlist_file: str = Field(default="greenlist.yaml", description="Greenlist file path")
     allowed_domains: List[str] = Field(default_factory=list, description="Allowed email domains")
     allowed_emails: List[str] = Field(default_factory=list, description="Allowed email addresses")
     require_authentication: bool = Field(default=True, description="Require user authentication")
