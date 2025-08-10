@@ -139,16 +139,7 @@ def get_btc_usd_price() -> Optional[float]:
     logger.info("Getting BTC/USD price")
     
     try:
-        # Try to use BitcoinService first
-        try:
-            from src.pocketflow.services import bitcoin_service
-            price = bitcoin_service.get_btc_price()
-            logger.info(f"Current BTC price from service: ${price}")
-            return price
-        except ImportError:
-            logger.debug("BitcoinService not available, using direct API")
-        except Exception as e:
-            logger.debug(f"BitcoinService failed: {e}, using direct API")
+        # Use direct API call
         
         # Fallback to direct API call
         response = requests.get(

@@ -269,8 +269,8 @@ class RealPodcastifyWorkflow:
             os.makedirs(output_dir, exist_ok=True)
             self.logger.info(f"Created output directory: {output_dir}")
             
-            # Create cache directory for Bark/HuggingFace
-            cache_dir = "/tmp/pocketflow_podcasts/.cache"
+            # Create cache directory for Bark/HuggingFace - use a location with proper permissions
+            cache_dir = "/opt/pocketflow/cache"
             os.makedirs(cache_dir, exist_ok=True)
             self.logger.info(f"Created cache directory: {cache_dir}")
             
@@ -319,74 +319,163 @@ class RealPodcastifyWorkflow:
                 self.logger.info(f"Generated audio file using pyttsx3: {output_file}")
                 return output_file
                 
-            except ImportError as e:
-                # Fallback to Bark if pyttsx3 not available
-                self.logger.warning(f"pyttsx3 not available: {e}, trying Bark TTS")
+            except Exception as e:
+                # First try direct espeak fallback
+                self.logger.warning(f"pyttsx3 failed: {e}, trying direct espeak")
                 try:
-                    self.logger.info("Attempting to use Bark TTS...")
+                    import subprocess
+                    import re
                     
-                    # Force CPU for Bark to avoid GPU memory issues
-                    os.environ['CUDA_VISIBLE_DEVICES'] = ''
-                    self.logger.info("Set CUDA_VISIBLE_DEVICES to empty string")
+                    # Clean text for espeak - remove markdown and special formatting
+                    clean_content = content
+                    # Remove markdown bold/italic
+                    clean_content = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_content)
+                    clean_content = re.sub(r'\*([^*]+)\*', r'\1', clean_content)
+                    # Remove markdown brackets and stage directions
+                    clean_content = re.sub(r'\[([^\]]+)\]', '', clean_content)
+                    # Remove timestamps
+                    clean_content = re.sub(r'\(\d+:\d+[^)]*\)', '', clean_content)
+                    # Remove extra whitespace and newlines
+                    clean_content = re.sub(r'\s+', ' ', clean_content).strip()
                     
-                    # Set Bark cache directory to writable location
-                    os.environ['HF_HOME'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['TRANSFORMERS_CACHE'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['HF_DATASETS_CACHE'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['HF_HUB_CACHE'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['HF_MODELS_CACHE'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['TORCH_HOME'] = '/tmp/pocketflow_podcasts/.cache'
-                    os.environ['HOME'] = '/tmp/pocketflow_podcasts'
-                    self.logger.info("Set all Bark/HuggingFace cache directories to /tmp/pocketflow_podcasts/.cache")
-                    self.logger.info("Set HOME to /tmp/pocketflow_podcasts")
+                    # Truncate if too long (espeak has limits)
+                    if len(clean_content) > 2000:
+                        clean_content = clean_content[:2000] + "..."
+                        self.logger.info(f"Truncated content to 2000 characters for espeak")
                     
-                    # Fix PyTorch weights_only issue for Bark
-                    import torch
-                    self.logger.info("Imported torch")
+                    self.logger.info(f"Cleaned content length: {len(clean_content)} characters")
                     
-                    # Monkey patch torch.load to use weights_only=False
-                    original_load = torch.load
-                    def safe_load(*args, **kwargs):
-                        kwargs['weights_only'] = False
-                        return original_load(*args, **kwargs)
-                    torch.load = safe_load
-                    self.logger.info("Applied torch.load monkey patch")
+                    # Use espeak directly
+                    espeak_cmd = [
+                        '/usr/bin/espeak',
+                        '-s', '150',  # Speech rate
+                        '-v', 'en',   # English voice
+                        '-w', output_file,  # Write to file
+                        clean_content
+                    ]
                     
-                    # Import Bark
-                    from bark import generate_audio, SAMPLE_RATE
-                    import soundfile as sf
-                    import numpy as np
-                    self.logger.info("Imported Bark and soundfile")
-                    
-                    # Configure voice based on preference
-                    voice_mapping = {
-                        "professional": "v2/en_speaker_6",  # Professional female voice
-                        "casual": "v2/en_speaker_9",        # Casual male voice
-                        "friendly": "v2/en_speaker_3"       # Friendly female voice
-                    }
-                    voice = voice_mapping.get(self.request.voice_preference, "v2/en_speaker_6")
-                    self.logger.info(f"Selected voice: {voice}")
-                    
-                    # Clean content for Bark (it has limits)
-                    cleaned_content = self._clean_text_for_bark(content)
-                    self.logger.info(f"Cleaned content length: {len(cleaned_content)}")
-                    
-                    # Generate audio using Bark
-                    self.logger.info("Calling Bark generate_audio...")
-                    audio_array = generate_audio(cleaned_content, history_prompt=voice)
-                    self.logger.info(f"Bark generated audio array with shape: {audio_array.shape}")
-                    
-                    # Save as WAV file
-                    sf.write(output_file, audio_array, SAMPLE_RATE)
-                    self.logger.info(f"Saved audio file: {output_file}")
-                    
-                    return output_file
-                    
-                except ImportError:
-                    # Fallback to improved audio file
-                    self.logger.warning("Bark not available, using improved fallback audio")
-                    self._create_improved_audio_file(output_file, content)
-                    return output_file
+                    # Run espeak with better error handling
+                    try:
+                        result = subprocess.run(espeak_cmd, check=True, capture_output=True, text=True, timeout=30)
+                        self.logger.info(f"Espeak command completed with return code: {result.returncode}")
+                        self.logger.info(f"Espeak stdout: {result.stdout[:100]}...")
+                        self.logger.info(f"Espeak stderr: {result.stderr[:100]}...")
+                        
+                        # Wait a moment for file system sync
+                        time.sleep(1)
+                        
+                        if os.path.exists(output_file):
+                            file_size = os.path.getsize(output_file)
+                            self.logger.info(f"Generated audio file using espeak: {output_file} ({file_size} bytes)")
+                            return output_file
+                        else:
+                            self.logger.error(f"Espeak reported success but file not created: {output_file}")
+                            # Try alternative approach - write text to file first
+                            self.logger.info("Trying alternative approach with text file...")
+                            text_file = output_file.replace('.wav', '.txt')
+                            with open(text_file, 'w') as f:
+                                f.write(clean_content)
+                            
+                            # Use espeak with text file input
+                            alt_cmd = [
+                                '/usr/bin/espeak',
+                                '-s', '150',
+                                '-v', 'en',
+                                '-w', output_file,
+                                '-f', text_file
+                            ]
+                            
+                            result2 = subprocess.run(alt_cmd, check=True, capture_output=True, text=True, timeout=30)
+                            self.logger.info(f"Alternative espeak command completed: {result2.returncode}")
+                            
+                            if os.path.exists(output_file):
+                                file_size = os.path.getsize(output_file)
+                                self.logger.info(f"Generated audio file using alternative method: {output_file} ({file_size} bytes)")
+                                return output_file
+                            else:
+                                raise Exception("Both espeak methods failed to create audio file")
+                                
+                    except subprocess.TimeoutExpired:
+                        self.logger.error("Espeak command timed out")
+                        raise Exception("Espeak command timed out")
+                    except subprocess.CalledProcessError as e:
+                        self.logger.error(f"Espeak command failed: {e}")
+                        self.logger.error(f"Espeak stderr: {e.stderr}")
+                        raise Exception(f"Espeak command failed: {e}")
+                        
+                except Exception as espeak_error:
+                    self.logger.warning(f"Direct espeak failed: {espeak_error}, trying Bark TTS")
+                    try:
+                        self.logger.info("Attempting to use Bark TTS...")
+                        
+                        # Force CPU for Bark to avoid GPU memory issues
+                        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+                        self.logger.info("Set CUDA_VISIBLE_DEVICES to empty string")
+                        
+                        # Set Bark cache directory to writable location
+                        os.environ['HF_HOME'] = '/opt/pocketflow/.cache'
+                        os.environ['TRANSFORMERS_CACHE'] = '/opt/pocketflow/.cache'
+                        os.environ['HF_DATASETS_CACHE'] = '/opt/pocketflow/.cache'
+                        os.environ['HF_HUB_CACHE'] = '/opt/pocketflow/.cache'
+                        os.environ['HF_MODELS_CACHE'] = '/opt/pocketflow/.cache'
+                        os.environ['TORCH_HOME'] = '/opt/pocketflow/.cache'
+                        os.environ['HOME'] = '/opt/pocketflow'
+                        self.logger.info("Set all Bark/HuggingFace cache directories to /opt/pocketflow/.cache")
+                        self.logger.info("Set HOME to /opt/pocketflow")
+                        
+                        # Fix PyTorch weights_only issue for Bark
+                        import torch
+                        self.logger.info("Imported torch")
+                        
+                        # Monkey patch torch.load to use weights_only=False
+                        original_load = torch.load
+                        def safe_load(*args, **kwargs):
+                            kwargs['weights_only'] = False
+                            return original_load(*args, **kwargs)
+                        torch.load = safe_load
+                        self.logger.info("Applied torch.load monkey patch")
+                        
+                        # Import Bark
+                        from bark import generate_audio, SAMPLE_RATE
+                        import soundfile as sf
+                        import numpy as np
+                        self.logger.info("Imported Bark and soundfile")
+                        
+                        # Configure voice based on preference
+                        voice_mapping = {
+                            "professional": "v2/en_speaker_6",  # Professional female voice
+                            "casual": "v2/en_speaker_9",        # Casual male voice
+                            "friendly": "v2/en_speaker_3"       # Friendly female voice
+                        }
+                        voice = voice_mapping.get(self.request.voice_preference, "v2/en_speaker_6")
+                        self.logger.info(f"Selected voice: {voice}")
+                        
+                        # Clean content for Bark (it has limits)
+                        cleaned_content = self._clean_text_for_bark(content)
+                        self.logger.info(f"Cleaned content length: {len(cleaned_content)}")
+                        
+                        # Generate audio using Bark
+                        self.logger.info("Calling Bark generate_audio...")
+                        audio_array = generate_audio(cleaned_content, history_prompt=voice)
+                        self.logger.info(f"Bark generated audio array with shape: {audio_array.shape}")
+                        
+                        # Save as WAV file
+                        sf.write(output_file, audio_array, SAMPLE_RATE)
+                        self.logger.info(f"Saved audio file: {output_file}")
+                        
+                        return output_file
+                        
+                    except ImportError:
+                        # Fallback to improved audio file
+                        self.logger.warning("Bark not available, using improved fallback audio")
+                        self._create_improved_audio_file(output_file, content)
+                        return output_file
+                    except Exception as bark_error:
+                        self.logger.error(f"Bark TTS failed: {bark_error}")
+                        # Final fallback to improved audio file
+                        self.logger.warning("Using final fallback audio")
+                        self._create_improved_audio_file(output_file, content)
+                        return output_file
             
         except Exception as e:
             self.logger.error(f"Audio generation failed: {e}")

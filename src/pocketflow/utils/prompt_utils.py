@@ -171,12 +171,49 @@ You can use these variables in your responses - they will be automatically repla
         "**Content Generation Example:**\n"
         "```json\n[\n  {\n    \"action\": \"generate\",\n    \"parameters\": {\n      \"type\": \"sound\",\n      \"prompt\": \"A 2-minute podcast about artificial intelligence\",\n      \"duration\": 120\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Here is your requested podcast about artificial intelligence!\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```\n\n"
         "**Podcast Generation Example (using podcastify tool):**\n"
-        "```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"podcastify\",\n      \"topic\": \"Local LLMs and their applications\",\n      \"duration_minutes\": 10,\n      \"style\": \"conversational\",\n      \"target_audience\": \"general\",\n      \"voice_preference\": \"professional\",\n      \"output_format\": \"wav\"\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"I've created a podcast about local LLMs for you! Here's your high-quality podcast episode.\",\n      \"attachment\": \"<generated file>\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```\n\n"
+        "```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"podcastify\",\n      \"topic\": \"Local LLMs and their applications\",\n      \"duration_minutes\": 10,\n      \"style\": \"conversational\",\n      \"target_audience\": \"general\",\n      \"voice_preference\": \"professional\",\n      \"output_format\": \"wav\"\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"I've created a podcast about local LLMs for you! Here's your high-quality podcast episode.\",\n      \"attachment\": \"{generated_file}\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```\n\n"
         "**IMPORTANT: Use variables like {sender_email} and {user_name} - they will be replaced automatically!**"
     )
     
     logger.info(f"Built unified system prompt for {sender_email}")
     return unified_prompt
+
+def _get_generated_file_path(shared) -> str:
+    """
+    Get the path to the most recently generated file from tool results.
+    
+    Args:
+        shared: Shared state object
+        
+    Returns:
+        File path string or placeholder if no file found
+    """
+    try:
+        # Check if there are tool results
+        if hasattr(shared, 'tool_results') and shared.tool_results:
+            # Look for the most recent tool result with a file path
+            for result in reversed(shared.tool_results):
+                if isinstance(result, dict) and 'result' in result:
+                    result_data = result['result']
+                    # Handle ToolResult objects
+                    if hasattr(result_data, 'data') and isinstance(result_data.data, dict):
+                        if 'file_path' in result_data.data:
+                            return result_data.data['file_path']
+                    # Handle plain dictionaries
+                    elif isinstance(result_data, dict) and 'file_path' in result_data:
+                        return result_data['file_path']
+        
+        # Fallback: check if there's a direct file path in shared state
+        if hasattr(shared, 'generated_file_path') and shared.generated_file_path:
+            return shared.generated_file_path
+            
+        # If no file found, return a placeholder that shows the expected pattern
+        return "/tmp/pocketflow_podcasts/podcast_[timestamp].wav"
+        
+    except Exception as e:
+        logger = get_logger("prompt_utils")
+        logger.warning(f"Error getting generated file path: {e}")
+        return "/tmp/pocketflow_podcasts/podcast_[timestamp].wav"
 
 def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
     """
@@ -194,6 +231,7 @@ def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
     - {email_body} - Body content of the current email
     - {conversation_length} - Number of messages in conversation
     - {has_previous_context} - Whether there's previous context
+    - {generated_file} - Path to the most recently generated file (e.g., podcast, image)
     """
     logger = get_logger("prompt_utils")
     
@@ -218,7 +256,8 @@ def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
         '{email_subject}': shared.email.get('subject', 'No subject') if shared.email else 'No subject',
         '{email_body}': shared.email.get('body', 'No content') if shared.email else 'No content',
         '{conversation_length}': str(len(shared.conversation) if shared.conversation else 0),
-        '{has_previous_context}': 'Yes' if shared.conversation and len(shared.conversation) > 1 else 'No'
+        '{has_previous_context}': 'Yes' if shared.conversation and len(shared.conversation) > 1 else 'No',
+        '{generated_file}': _get_generated_file_path(shared)
     }
     
     # Replace variables in text

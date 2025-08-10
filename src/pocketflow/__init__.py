@@ -29,7 +29,6 @@ from .services import (
     email_service,
     llm_service,
     content_service,
-    bitcoin_service,
     websearch_service,
     database_service
 )
@@ -170,7 +169,6 @@ __all__ = [
     "email_service",
     "llm_service", 
     "content_service",
-    "bitcoin_service",
     "websearch_service",
     
     # Nodes

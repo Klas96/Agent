@@ -17,7 +17,7 @@ class DonationMonitor:
     
     def __init__(self, db_path: str = None):
         self.logger = get_logger("DonationMonitor")
-        self.db = DatabaseService(db_path)
+        self.db = DatabaseService()
         self.address_to_user_map = {}
         self.load_address_mappings()
     

@@ -60,7 +60,7 @@ def get_system_health() -> Dict[str, Any]:
         "database": {"status": "unknown", "last_check": None, "error": None},
         "email_service": {"status": "unknown", "last_check": None, "error": None},
         "llm_service": {"status": "unknown", "last_check": None, "error": None},
-        "bitcoin_service": {"status": "unknown", "last_check": None, "error": None}
+
     }
     
     try:
@@ -110,20 +110,6 @@ def get_system_health() -> Dict[str, Any]:
         health_status["llm_service"]["last_check"] = datetime.now().isoformat()
         add_error("llm_service", f"LLM service check failed: {e}")
     
-    try:
-        # Check Bitcoin service
-        from ..services.bitcoin_service import BitcoinService
-        bitcoin_service = BitcoinService()
-        # Try to get a test address
-        test_address = bitcoin_service.get_or_create_address("test@example.com")
-        if test_address:
-            health_status["bitcoin_service"]["status"] = "connected"
-            health_status["bitcoin_service"]["last_check"] = datetime.now().isoformat()
-    except Exception as e:
-        health_status["bitcoin_service"]["status"] = "disconnected"
-        health_status["bitcoin_service"]["error"] = str(e)
-        health_status["bitcoin_service"]["last_check"] = datetime.now().isoformat()
-        add_error("bitcoin_service", f"Bitcoin service check failed: {e}")
     
     return health_status
 
@@ -559,19 +545,6 @@ def api_health():
         add_error("api", f"API health endpoint failed: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-@admin_bp.route("/api/bitcoin/info")
-def api_bitcoin_info():
-    """API endpoint for Bitcoin service information."""
-    try:
-        from ..services.bitcoin_service import BitcoinService
-        bitcoin_service = BitcoinService()
-        
-        info = bitcoin_service.get_service_info()
-        return jsonify({"success": True, "info": info})
-    except Exception as e:
-        logger.error(f"Error in API bitcoin info: {e}")
-        add_error("api", f"API bitcoin info endpoint failed: {e}")
-        return jsonify({"success": False, "error": str(e)})
 
 @admin_bp.route("/api/errors")
 def api_errors():

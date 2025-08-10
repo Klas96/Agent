@@ -42,12 +42,6 @@ class Settings(BaseSettings):
     CONTENT_OUTPUT_DIR: str = Field(default="/opt/pocketflow/data/generated", env="CONTENT_OUTPUT_DIR")
     MAX_CONTENT_DURATION: int = Field(default=300, env="MAX_CONTENT_DURATION")  # 5 minutes
     
-    # Bitcoin Configuration
-    ELECTRUM_HOST: str = Field(default="localhost", env="ELECTRUM_HOST")
-    ELECTRUM_PORT: int = Field(default=50001, env="ELECTRUM_PORT")
-    ELECTRUM_USERNAME: Optional[str] = Field(default=None, env="ELECTRUM_USERNAME")
-    ELECTRUM_PASSWORD: Optional[str] = Field(default=None, env="ELECTRUM_PASSWORD")
-    
     # Database
     DATABASE_URL: str = Field(default="sqlite:///pocketflow.db", env="DATABASE_URL")
     

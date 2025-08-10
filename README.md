@@ -5,17 +5,23 @@ An AI-powered email processing and content generation system with Bitcoin paymen
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# Install system dependencies (Ubuntu/Debian)
+sudo ./install-system.sh
+
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run the main application
+# Run the main application (development)
 python main.py
 
+# Run the main application (production)
+sudo systemctl start pocketflow.service
+
 # Start the web control panel
-python -m src.pocketflow.web.app
+python control_panel.py
 
 # Run tests
-python run_tests.py
+python tests/run_tests.py
 ```
 
 ## 📚 Documentation
@@ -32,11 +38,14 @@ All documentation is located in the `docs/` folder:
 ## 🧪 Testing
 
 ```bash
-# Run all tests and deploy if successful
-python run_tests.py
+# Run all tests
+python tests/run_tests.py
 
 # Run specific test suite
 python -m unittest tests.test_investigation_report_workflow_simple -v
+
+# Run with pytest
+pytest tests/
 ```
 
 ## 📁 Project Structure
@@ -45,13 +54,18 @@ python -m unittest tests.test_investigation_report_workflow_simple -v
 PocketFlow/
 ├── README.md                    # This file
 ├── main.py                      # Main application entry point
-├── run_tests.py                 # Test runner
+├── control_panel.py             # Web control panel
 ├── deploy.sh                    # Deployment script
+├── install-system.sh            # System installation script
+├── manage_services.sh           # Service management script
 ├── docs/                        # Documentation
 │   ├── index.md                # Main documentation
 │   ├── README_*.md             # Feature documentation
-│   └── ...                     # Other docs
+│   ├── core_abstraction/       # Core framework docs
+│   ├── design_pattern/         # Design pattern docs
+│   └── utility_function/       # Utility function docs
 ├── tests/                       # Test files
+│   ├── run_tests.py            # Test runner
 │   ├── test_*.py               # Test suites
 │   └── ...                     # Test fixtures
 ├── src/pocketflow/             # Main source code
@@ -62,11 +76,16 @@ PocketFlow/
 │   ├── web/                    # Web control panel
 │   ├── agents/                 # AI agent implementations
 │   ├── config/                 # Configuration management
-│   └── utils/                  # Utility functions
+│   ├── utils/                  # Utility functions
+│   ├── tools/                  # Tool implementations
+│   └── api/                    # API endpoints
 ├── templates/                   # LaTeX templates
 ├── data/                        # Database and data files
 ├── generated/                   # Generated content output
 ├── config/                      # Configuration files
+├── scripts/                     # Utility scripts
+├── examples/                    # Example implementations
+├── cookbook/                    # Code examples and patterns
 └── requirements.txt             # Dependencies
 ```
 
@@ -85,7 +104,7 @@ PocketFlow/
 - **Attachment Handling**: Process and generate attachments
 
 ### 🎨 Content Generation
-- **Audio Generation**: Create podcasts, songs, and sound content
+- **Audio Generation**: Create podcasts, songs, and sound content using TTS and audio synthesis
 - **Image Generation**: Generate images from text descriptions
 - **Document Creation**: LaTeX-based document generation
 - **Multi-format Output**: Support for various content formats
@@ -96,7 +115,7 @@ PocketFlow/
 - **Report Generation**: Automated report creation from research
 
 ### 💰 Payment System
-- **Bitcoin Integration**: Direct Bitcoin payment processing
+- **Bitcoin Integration**: Direct Bitcoin payment processing via Electrum
 - **Token Management**: User token tracking and management
 - **Payment Verification**: Automated payment confirmation
 - **Greenlist System**: Whitelist management for trusted users
@@ -117,6 +136,8 @@ PocketFlow/
 - ✅ Web control panel
 - ✅ Multi-flow architecture
 - ✅ Token-based access control
+- ✅ System service management
+- ✅ Audio generation improvements
 
 ## 🔧 Configuration
 
@@ -146,6 +167,25 @@ SECRET_KEY=your-secret-key
 TOKEN_PRICE_USD=0.01
 ```
 
+## 🛠️ Service Management
+
+```bash
+# Start the service
+sudo systemctl start pocketflow.service
+
+# Stop the service
+sudo systemctl stop pocketflow.service
+
+# Check service status
+sudo systemctl status pocketflow.service
+
+# View service logs
+sudo journalctl -u pocketflow.service -f
+
+# Enable service on boot
+sudo systemctl enable pocketflow.service
+```
+
 ## 📖 More Information
 
 For detailed documentation, see the `docs/` folder or visit the [main documentation](docs/index.md).
@@ -155,7 +195,7 @@ For detailed documentation, see the `docs/` folder or visit the [main documentat
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests: `python run_tests.py`
+4. Run tests: `python tests/run_tests.py`
 5. Submit a pull request
 
 ## 📄 License

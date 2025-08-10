@@ -60,7 +60,7 @@ class EmailProcessorFlow:
                 .add_routing("pop_action", "send", "send_email")
                 # Tool execution routing
                 .add_routing("tool_execution", "finish", "finish")
-                .add_routing("tool_execution", "send", "send_email")
+                .add_routing("tool_execution", "default", "pop_action")
                 # Content generation routing
                 .add_routing("content_creator", "default", "content_params")
                 .add_routing("content_params", "default", "generate_content")

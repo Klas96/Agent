@@ -61,6 +61,13 @@ class SendEmailNode(Node):
         body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
         subject_with_vars_replaced = replace_variables_in_text(subject, shared, sender_email)
         
+        # Replace variables in attachment path if present
+        attachment = params.get("attachment")
+        attachment_with_vars_replaced = None
+        if attachment:
+            attachment_with_vars_replaced = replace_variables_in_text(attachment, shared, sender_email)
+            logger.info(f"Replaced variables in attachment path: '{attachment}' -> '{attachment_with_vars_replaced}'")
+        
         # Validate recipient AFTER variable replacement
         if to_with_vars_replaced == sender_email:
             logger.info(f"User {sender_email} is replying to themselves - this is allowed")
@@ -102,14 +109,14 @@ class SendEmailNode(Node):
         
         logger.info(f"Replaced variables in email body and subject for {sender_email}")
         
-        return email_service, to_with_vars_replaced, subject_with_vars_replaced, body_with_vars_replaced, params, email, shared
+        return email_service, to_with_vars_replaced, subject_with_vars_replaced, body_with_vars_replaced, attachment_with_vars_replaced, email, shared
     
     def exec(self, prep_result):
         """Execute by sending the email."""
         if not prep_result:
             return None
             
-        email_service, to, subject, body, params, email, shared = prep_result
+        email_service, to, subject, body, attachment, email, shared = prep_result
         
         # Set up proper reply headers for email threading
         original_message_id = email.get("message_id")
@@ -159,8 +166,8 @@ class SendEmailNode(Node):
             to=to,
             subject=reply_subject,
             body=body,
-            cc=params.get("cc"),
-            attachment=params.get("attachment") or getattr(shared, 'attachment', None),
+            cc=None,  # No CC support in current implementation
+            attachment=attachment,
             in_reply_to=in_reply_to,
             references=references
         )
@@ -176,7 +183,7 @@ class SendEmailNode(Node):
             
             # Only mark as replied if the email was sent to the original sender
             if prep_res:
-                email_service, to, subject, body, params, email, shared = prep_res
+                email_service, to, subject, body, attachment, email, shared = prep_res
                 
                 # Extract original sender email
                 from_field = email.get("from", "")

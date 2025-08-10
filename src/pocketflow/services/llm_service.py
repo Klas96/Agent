@@ -306,12 +306,17 @@ class LLMService:
 
 You can choose one of these actions:
 - send: Reply to the sender or to a specified recipient.
+  - to: recipient email (use {sender_email} to reply to the original sender)
+  - body: email body text
+  - attachment: full path to the generated file (e.g., /tmp/pocketflow_podcasts/podcast_1234567890.wav)
 - generate: Generate content (sound, image, or document).
   - type: sound, image, or document
   - prompt: a description of what to generate
   - duration: (optional, in seconds)
 - investigate: Research a topic or answer a question using web search.
 - finish: End the conversation and trigger a guaranteed response to the sender.
+
+IMPORTANT: When using the 'send' action with an attachment, you MUST use the actual file path from the tool results, not a placeholder like "<generated file>".
 
 Reply ONLY in JSON format, and nothing else. Do NOT add any text before or after the JSON block.
 
@@ -331,7 +336,7 @@ Example:
     "parameters": {
       "to": "user@example.com",
       "body": "Here is your requested song!",
-      "attachment": "<generated file>"
+      "attachment": "{generated_file}"
     }
   },
   {
