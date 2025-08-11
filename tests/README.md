@@ -1,108 +1,146 @@
-# Email Threading Tests
+# PocketFlow Tests
 
-This directory contains comprehensive tests for the email threading functionality in PocketFlow.
+This directory contains comprehensive tests for the PocketFlow application, including database migration tests, PostgreSQL connectivity tests, and dashboard functionality tests.
 
 ## Test Files
 
-### `test_email_threading.py`
-Unit tests for email threading functionality:
+### `test_postgresql.py`
+Tests PostgreSQL database connectivity and basic operations:
+- ✅ PostgreSQL connection and version check
+- ✅ Table existence verification
+- ✅ Basic CRUD operations
+- ✅ DatabaseService integration
 
-- **Empty Subject Threading**: Tests that emails with empty subjects are handled correctly for proper threading
-- **Subject with 'Re:' Prefix**: Tests that subjects with existing "Re:" prefixes are cleaned and re-added correctly
-- **References Chain Building**: Tests that the References header builds proper chains for multi-reply conversations
-- **Message-ID Format**: Tests that Message-IDs are generated with the correct format and domain
-- **Error Handling**: Tests graceful handling of missing or invalid data
-- **EmailService Integration**: Tests that the EmailService sets all threading headers correctly
+### `test_migration.py`
+Tests database migration from SQLite to PostgreSQL:
+- ✅ SQLite database structure and data verification
+- ✅ PostgreSQL database structure and data verification
+- ✅ Data integrity checks
+- ✅ Database compatibility testing
 
-### `test_email_integration.py`
-Integration tests for the complete email flow:
+### `test_dashboard.py`
+Tests the dashboard application functionality:
+- ✅ Dashboard import and app creation
+- ✅ Route registration and accessibility
+- ✅ Database integration
+- ✅ API endpoint verification
 
-- **Complete Tokenless Email Flow**: Tests the full flow from receiving an email to sending a threaded reply
-- **Complete Regular Email Flow**: Tests the full flow for registered users
-- **EmailService Integration**: Tests the EmailService with real threading headers
-- **Subject Email Threading**: Tests threading with emails that have subjects
-- **Error Handling**: Tests error handling in the complete flow
+### `run_tests.py`
+Test runner script that executes all tests and provides a comprehensive summary.
 
-## Running the Tests
+## Running Tests
 
-### Prerequisites
+### Run All Tests
 ```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Install pytest (if not already installed)
-pip install pytest
+python3 tests/run_tests.py
 ```
 
-### Run All Email Tests
+### Run Individual Tests
 ```bash
-python -m pytest tests/test_email_*.py -v
+# PostgreSQL tests
+python3 tests/test_postgresql.py
+
+# Migration tests
+python3 tests/test_migration.py
+
+# Dashboard tests
+python3 tests/test_dashboard.py
 ```
 
-### Run Specific Test Files
-```bash
-# Run only threading tests
-python -m pytest tests/test_email_threading.py -v
+## Test Environment
 
-# Run only integration tests
-python -m pytest tests/test_email_integration.py -v
+The tests automatically set up the required environment variables:
+- `DATABASE_URL`: PostgreSQL connection string
+- `EMAIL_HOST`: Localhost for testing
+- `EMAIL_USERNAME`: Test email
+- `EMAIL_PASSWORD`: Test password
+
+## Test Results
+
+### Expected Output
 ```
+🧪 PocketFlow Test Suite
+============================================================
 
-### Run Specific Test Methods
-```bash
-# Run a specific test method
-python -m pytest tests/test_email_threading.py::TestEmailThreading::test_tokenless_send_email_node_empty_subject_threading -v
+============================================================
+Running test_postgresql.py...
+============================================================
+✓ Connected to PostgreSQL successfully
+✓ PostgreSQL version: PostgreSQL 16.9...
+✓ Found tables: ['greenlist', 'job_executions', 'scheduled_jobs', 'users']
+✓ Successfully created and read user: test@example.com (Test User)
+✓ PostgreSQL test completed successfully!
+✓ DatabaseService initialized successfully
+✓ Retrieved 2 users from database
+✓ Retrieved 0 scheduled jobs
+✓ DatabaseService test completed successfully!
 
-# Run tests with specific markers
-python -m pytest -m threading -v
+🎉 All tests passed!
+
+============================================================
+📊 Test Results Summary
+============================================================
+test_postgresql.py: ✅ PASSED
+test_migration.py: ✅ PASSED
+test_dashboard.py: ✅ PASSED
+
+============================================================
+🎉 All tests passed!
 ```
 
 ## Test Coverage
 
-The tests cover the following key aspects of email threading:
+### Database Tests
+- ✅ PostgreSQL connectivity
+- ✅ Table creation and structure
+- ✅ Data insertion and retrieval
+- ✅ DatabaseService functionality
+- ✅ Migration compatibility
 
-### Threading Headers
-- `In-Reply-To`: Points to the original message ID
-- `References`: Builds a chain of message IDs for the conversation
-- `Subject`: Handles empty subjects and "Re:" prefixes correctly
-- `Message-ID`: Generates unique message IDs with proper format
+### Dashboard Tests
+- ✅ Flask app creation
+- ✅ Route registration
+- ✅ API endpoints
+- ✅ Database integration
+- ✅ Import path resolution
 
-### Email Nodes
-- `TokenlessSendEmailNode`: For non-registered users
-- `SendEmailNode`: For registered users
-- `EmailService`: Core email sending functionality
+### Migration Tests
+- ✅ SQLite to PostgreSQL migration
+- ✅ Data integrity verification
+- ✅ Schema compatibility
+- ✅ Service compatibility
 
-### Edge Cases
-- Empty subjects (like your original emails)
-- Existing "Re:" prefixes in various formats
-- Missing message IDs
-- Invalid email data
-- References chains for multi-reply conversations
+## Troubleshooting
 
-## Key Findings
+### Common Issues
 
-The tests verify that:
+1. **Import Errors**: Ensure you're running tests from the project root directory
+2. **Database Connection**: Verify PostgreSQL is running and accessible
+3. **Environment Variables**: Tests automatically set required environment variables
+4. **Path Issues**: Tests handle both development and production paths
 
-1. **Empty subjects are preserved** for proper threading in Gmail
-2. **"Re:" prefixes are handled correctly** without duplication
-3. **References chains are built properly** for conversation threading
-4. **Message-IDs are unique** and use the correct domain
-5. **Error handling is graceful** for missing or invalid data
+### Debug Mode
+To run tests with more verbose output, modify the test runner to include debug information.
 
-## Configuration
+## Adding New Tests
 
-Tests use mock settings and don't require real email credentials. The `pytest.ini` file configures:
+1. Create a new test file in the `tests/` directory
+2. Follow the naming convention: `test_*.py`
+3. Include proper error handling and clear success/failure messages
+4. Add the test file to the list in `run_tests.py`
+5. Ensure tests are executable: `chmod +x tests/test_*.py`
 
-- Test discovery patterns
-- Verbose output
-- Warning suppression
-- Custom markers for test organization
+## Test Dependencies
 
-## Contributing
+- `psycopg2-binary`: PostgreSQL adapter
+- `sqlite3`: Built-in SQLite support
+- `pocketflow`: Main application package
+- `flask`: Dashboard framework
 
-When adding new email threading functionality:
+## Continuous Integration
 
-1. Add unit tests to `test_email_threading.py`
-2. Add integration tests to `test_email_integration.py`
-3. Ensure all tests pass before committing
-4. Update this README if adding new test categories 
+These tests can be integrated into CI/CD pipelines to ensure:
+- Database migrations work correctly
+- PostgreSQL connectivity is maintained
+- Dashboard functionality is preserved
+- No regressions are introduced 

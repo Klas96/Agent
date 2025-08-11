@@ -119,6 +119,14 @@ PocketFlow/
 - **Token Management**: User token tracking and management
 - **Payment Verification**: Automated payment confirmation
 
+### 🔄 Workflow Automation (n8n-like)
+- **Workflow Builder**: Code-based JSON configuration for direct workflow definition
+- **Workflow Visualizer**: Visual diagram generation from JSON workflows
+- **Scheduled Jobs**: Cron-based job scheduling with execution history
+- **Node Types**: Email triggers, LLM processing, content generation, API calls, and more
+- **Real-time Execution**: Live job monitoring and execution control
+- **Workflow Templates**: Pre-built templates for common automation tasks
+
 ### 🖥️ Web Control Panel
 - **Admin Dashboard**: Comprehensive system monitoring
 - **User Management**: Add, edit, and manage users
@@ -137,6 +145,10 @@ PocketFlow/
 - ✅ Token-based access control
 - ✅ System service management
 - ✅ Audio generation improvements
+- ✅ **NEW**: Visual workflow editor (n8n-like interface)
+- ✅ **NEW**: Scheduled jobs with cron expressions
+- ✅ **NEW**: Real-time job execution monitoring
+- ✅ **NEW**: Code-based workflow builder
 
 ## 🔧 Configuration
 
@@ -183,6 +195,49 @@ sudo journalctl -u pocketflow.service -f
 
 # Enable service on boot
 sudo systemctl enable pocketflow.service
+```
+
+## 🔄 Workflow Automation Usage
+
+### Workflow Builder (Code-based)
+1. **Access the Builder**: Navigate to `http://localhost:5001/admin/workflow-builder`
+2. **Define Workflow**: Write JSON configuration directly
+3. **Use Templates**: Load pre-built templates for common workflows
+4. **Validate**: Check workflow syntax and structure
+5. **Test**: Execute workflows for testing
+
+### Workflow Visualizer
+1. **Access the Visualizer**: Navigate to `http://localhost:5001/admin/workflow-visualizer`
+2. **Paste JSON**: Input your workflow JSON configuration
+3. **Generate Diagram**: Click "Visualize Workflow" to create diagrams
+4. **View Details**: See workflow statistics and node information
+5. **Export**: Save diagrams as images (coming soon)
+
+### Scheduled Jobs
+1. **Create Jobs**: Go to `http://localhost:5001/admin/jobs`
+2. **Set Schedule**: Use cron expressions (e.g., `0 0 * * *` for daily at midnight)
+3. **Configure Flow**: Define the workflow configuration in JSON format
+4. **Monitor Execution**: View real-time execution history and logs
+
+### Example Workflow
+```json
+{
+  "flow_type": "email_processor",
+  "nodes": [
+    {
+      "type": "email_trigger",
+      "config": {"filter": "subject:newsletter"}
+    },
+    {
+      "type": "llm_node", 
+      "config": {"prompt": "Summarize this email"}
+    },
+    {
+      "type": "email_action",
+      "config": {"template": "summary_response"}
+    }
+  ]
+}
 ```
 
 ## 📖 More Information

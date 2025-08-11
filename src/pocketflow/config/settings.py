@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     MAX_CONTENT_DURATION: int = Field(default=300, env="MAX_CONTENT_DURATION")  # 5 minutes
     
     # Database
-    DATABASE_URL: str = Field(default="sqlite:///pocketflow.db", env="DATABASE_URL")
+    DATABASE_URL: str = Field(default="postgresql://pocketflow:pocketflow_password@localhost:5432/pocketflow", env="DATABASE_URL")
     
     # Logging
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")

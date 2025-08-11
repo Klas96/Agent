@@ -163,7 +163,7 @@ class FlowConfig(BaseModel):
     routing: Dict[str, Dict[str, str]] = Field(default_factory=dict, description="Routing rules")
     timeout: Optional[int] = Field(default=None, description="Flow timeout in seconds")
     flow_type: FlowType = Field(description="Type of flow")
-    requires_tokens: bool = Field(description="Whether this flow requires tokens")
+    requires_tokens: bool = Field(default=False, description="Whether this flow requires tokens")
     
     class Config:
         extra = "forbid" 
