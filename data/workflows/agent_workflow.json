@@ -1,0 +1,101 @@
+{
+  "name": "Email Agent Workflow",
+  "description": "Complete email processing workflow using agent nodes",
+  "nodes": [
+    {
+      "id": "email-fetching-1",
+      "type": "EmailFetchingNode",
+      "name": "Email Fetching",
+      "position": {"x": 100, "y": 100},
+      "data": {
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "user@example.com",
+        "password": "password",
+        "use_tls": true
+      }
+    },
+    {
+      "id": "decision-agent-1",
+      "type": "DecisionAgentNode",
+      "name": "Decision Agent",
+      "position": {"x": 300, "y": 100},
+      "data": {
+        "analysis_prompt": "Analyze the email and determine the best course of action",
+        "decision_threshold": 0.7
+      }
+    },
+    {
+      "id": "content-creator-1",
+      "type": "ContentCreatorNode",
+      "name": "Content Creator",
+      "position": {"x": 500, "y": 50},
+      "data": {
+        "content_type": "text",
+        "template": "professional"
+      }
+    },
+    {
+      "id": "investigation-1",
+      "type": "InvestigationNode",
+      "name": "Investigation",
+      "position": {"x": 500, "y": 150},
+      "data": {
+        "search_query": "{{email_subject}}",
+        "search_depth": "medium"
+      }
+    },
+    {
+      "id": "message-sending-1",
+      "type": "MessageSendingNode",
+      "name": "Message Sending",
+      "position": {"x": 700, "y": 100},
+      "data": {
+        "message_content": "{{generated_content}}",
+        "message_type": "email"
+      }
+    },
+    {
+      "id": "post-processing-1",
+      "type": "PostProcessingNode",
+      "name": "Post Processing",
+      "position": {"x": 900, "y": 100},
+      "data": {
+        "post_processing_tasks": ["log", "summarize", "cleanup"]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "email-fetching-1",
+      "target": "decision-agent-1"
+    },
+    {
+      "source": "decision-agent-1",
+      "target": "content-creator-1",
+      "condition": "decision == 'content_creation'"
+    },
+    {
+      "source": "decision-agent-1",
+      "target": "investigation-1",
+      "condition": "decision == 'investigation'"
+    },
+    {
+      "source": "content-creator-1",
+      "target": "message-sending-1"
+    },
+    {
+      "source": "investigation-1",
+      "target": "message-sending-1"
+    },
+    {
+      "source": "message-sending-1",
+      "target": "post-processing-1"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_by": "PocketFlow Agent System",
+    "description": "This workflow demonstrates the complete agent-based email processing pipeline"
+  }
+} 

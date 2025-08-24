@@ -1,92 +1,78 @@
 """
-Nodes package for PocketFlow.
+Node system for PocketFlow.
 
-This package contains all node implementations organized by functionality.
+This module provides the original PocketFlow nodes and adds n8n-like workflow capabilities.
 """
+from typing import Dict, List, Type
 
-from .email import (
-    FetchEmailNode,
-    SendEmailNode,
-    ConversationContextNode,
-    PostProcessNode
-)
+# Original PocketFlow nodes
+from .email.fetch import FetchEmailNode
+from .email.send import SendEmailNode
+from .email.context import ConversationContextNode
+from .email.postprocess import PostProcessNode
 from .email.tokenless_send import TokenlessSendEmailNode
+from .email.tokenless_response import TokenlessResponseNode
 
-from .agent import (
-    AgentNode,
-    PopAgentActionNode
+from .agent.core import AgentNode
+from .agent.tool_agent import ToolAgentNode
+
+from .content.generator import ContentGeneratorNode
+from .content.creator import ContentCreatorNode
+from .content.document_generator import DocumentGeneratorNode
+
+from .investigation.investigation import InvestigationNode as OriginalInvestigationNode
+from .investigation.topic_investigation import TopicInvestigationNode
+
+from .user_status import UserStatusNode
+from .user_status_simplified import UserStatusSimplifiedNode
+
+# n8n-like workflow nodes (built on top of original PocketFlow)
+from .workflow.base import WorkflowNode, WorkflowNodeMetadata
+from .workflow.triggers import EmailFetchingNode, ScheduledTriggerNode, ManualTriggerNode
+from .workflow.agents import (
+    DecisionAgentNode, ContentCreatorNode, InvestigationNode, 
+    MessageSendingNode, PostProcessingNode
 )
-
-from .content import (
-    ContentCreatorNode,
-    ContentParamNode,
-    GenerateContentNode,
-    DocumentGeneratorNode
+from .workflow.actions import (
+    SendEmailWorkflowNode, GenerateContentWorkflowNode, 
+    GenerateLatexWorkflowNode, WebSearchWorkflowNode, HttpRequestWorkflowNode
 )
+from .workflow.conditions import IfElseWorkflowNode, TransformWorkflowNode, DelayWorkflowNode, LogWorkflowNode
 
-from .investigation import (
-    InvestigateTopicNode
-)
+# Workflow registry for n8n-like features
+from .workflow.registry import WorkflowNodeRegistry
 
-from .user_status import (
-    UserStatusCheckNode,
-    TokenValidationNode,
-    TokenConsumptionNode,
-    FlowRoutingNode
-)
-
-from ..core.node import SimpleNode
-from ..utils.logging import get_logger
-
-class FinishNode(SimpleNode):
-    """A simple terminal node for flow completion."""
-    def process(self, shared):
-        """Mark email as read and finish the flow."""
-        logger = get_logger("FinishNode")
-        
-        # Mark the email as read to prevent infinite loops
-        email = getattr(shared, 'email', None)
-        if email and email.get("id"):
-            try:
-                from ..services import email_service
-                email_id = email.get("id")
-                logger.info(f"Marking email {email_id} as read")
-                success = email_service.mark_as_read(email_id)
-                if success:
-                    logger.info(f"Email {email_id} marked as read successfully")
-                else:
-                    logger.warning(f"Failed to mark email {email_id} as read")
-            except Exception as e:
-                logger.error(f"Failed to mark email as read: {e}")
-        
-        logger.info("Flow completed successfully")
-        return {"route": "finish"}
-
+# Export original nodes for backward compatibility
 __all__ = [
-    # Email nodes
-    "FetchEmailNode",
-    "SendEmailNode", 
-    "ConversationContextNode",
-    "PostProcessNode",
-    "TokenlessSendEmailNode",
+    # Original email nodes
+    'FetchEmailNode', 'SendEmailNode', 'ConversationContextNode', 'PostProcessNode',
+    'TokenlessSendEmailNode', 'TokenlessResponseNode',
     
-    # Agent nodes
-    "AgentNode",
-    "PopAgentActionNode",
+    # Original agent nodes
+    'AgentNode', 'ToolAgentNode',
     
-    # Content nodes
-    "ContentCreatorNode",
-    "ContentParamNode",
-    "GenerateContentNode",
-    "DocumentGeneratorNode",
+    # Original content nodes
+    'ContentGeneratorNode', 'ContentCreatorNode', 'DocumentGeneratorNode',
     
-    # Investigation nodes
-    "InvestigateTopicNode",
+    # Original investigation nodes
+    'OriginalInvestigationNode', 'TopicInvestigationNode',
     
-    # User status nodes
-    "UserStatusCheckNode",
-    "TokenValidationNode",
-    "TokenConsumptionNode",
-    "FlowRoutingNode",
-    "FinishNode",
-] 
+    # Original user status nodes
+    'UserStatusNode', 'UserStatusSimplifiedNode',
+    
+    # n8n-like workflow nodes
+    'WorkflowNode', 'WorkflowNodeMetadata',
+    'EmailFetchingNode', 'ScheduledTriggerNode', 'ManualTriggerNode',
+    'DecisionAgentNode', 'ContentCreatorNode', 'InvestigationNode', 
+    'MessageSendingNode', 'PostProcessingNode',
+    'SendEmailWorkflowNode', 'GenerateContentWorkflowNode', 
+    'GenerateLatexWorkflowNode', 'WebSearchWorkflowNode', 'HttpRequestWorkflowNode',
+    'IfElseWorkflowNode', 'TransformWorkflowNode', 'DelayWorkflowNode', 'LogWorkflowNode',
+    
+    # Workflow registry
+    'WorkflowNodeRegistry',
+    'workflow_node_registry'
+]
+
+# Create global workflow registry instance
+workflow_node_registry = WorkflowNodeRegistry() 

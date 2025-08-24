@@ -215,6 +215,40 @@ def _get_generated_file_path(shared) -> str:
         logger.warning(f"Error getting generated file path: {e}")
         return "/tmp/pocketflow_podcasts/podcast_[timestamp].wav"
 
+
+def _get_tool_result(shared) -> str:
+    """
+    Get the result from the most recent tool execution.
+    
+    Args:
+        shared: Shared state object
+        
+    Returns:
+        Tool result string or placeholder if no result found
+    """
+    try:
+        # Check if there are tool results
+        if hasattr(shared, 'tool_results') and shared.tool_results:
+            # Get the most recent tool result
+            latest_result = shared.tool_results[-1]
+            if isinstance(latest_result, dict) and 'result' in latest_result:
+                result_data = latest_result['result']
+                # Handle ToolResult objects
+                if hasattr(result_data, 'data') and isinstance(result_data.data, dict):
+                    if 'result' in result_data.data:
+                        return str(result_data.data['result'])
+                # Handle plain dictionaries
+                elif isinstance(result_data, dict) and 'result' in result_data:
+                    return str(result_data['result'])
+        
+        # If no tool result found, return a placeholder
+        return "No result available"
+        
+    except Exception as e:
+        logger = get_logger("prompt_utils")
+        logger.warning(f"Error getting tool result: {e}")
+        return "Error getting result"
+
 def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
     """
     Replace variables in text with their actual values.
@@ -257,7 +291,8 @@ def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
         '{email_body}': shared.email.get('body', 'No content') if shared.email else 'No content',
         '{conversation_length}': str(len(shared.conversation) if shared.conversation else 0),
         '{has_previous_context}': 'Yes' if shared.conversation and len(shared.conversation) > 1 else 'No',
-        '{generated_file}': _get_generated_file_path(shared)
+        '{generated_file}': _get_generated_file_path(shared),
+        '{result}': _get_tool_result(shared)
     }
     
     # Replace variables in text

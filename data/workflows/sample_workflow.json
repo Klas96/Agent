@@ -1,0 +1,169 @@
+{
+  "id": "sample-email-to-latex-workflow",
+  "name": "Email to LaTeX Report",
+  "description": "A sample workflow that triggers on email receipt and generates a LaTeX report",
+  "nodes": [
+    {
+      "id": "trigger-1",
+      "type": "EmailReceivedTrigger",
+      "name": "Email Trigger",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "data": {
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "user@example.com",
+        "password": "password",
+        "use_tls": true
+      }
+    },
+    {
+      "id": "log-1",
+      "type": "LogNode",
+      "name": "Log Email Received",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "message": "Email received: {{email_data.subject}}",
+        "log_level": "INFO"
+      }
+    },
+    {
+      "id": "condition-1",
+      "type": "IfElseNode",
+      "name": "Check if Report Request",
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "data": {
+        "condition": "Check if email contains report request",
+        "value1": "{{email_data.body}}",
+        "operator": "contains",
+        "value2": "report"
+      }
+    },
+    {
+      "id": "search-1",
+      "type": "WebSearchAction",
+      "name": "Search for Information",
+      "position": {
+        "x": 700,
+        "y": 50
+      },
+      "data": {
+        "query": "{{email_data.subject}} latest information",
+        "max_results": 5
+      }
+    },
+    {
+      "id": "latex-1",
+      "type": "GenerateLatexAction",
+      "name": "Generate LaTeX Report",
+      "position": {
+        "x": 900,
+        "y": 50
+      },
+      "data": {
+        "template": "report",
+        "title": "Report: {{email_data.subject}}",
+        "content": "Based on the email request and web search results:\n\n{{search_results}}\n\nThis report was generated automatically in response to the email request.",
+        "author": "PocketFlow"
+      }
+    },
+    {
+      "id": "email-1",
+      "type": "SendEmailAction",
+      "name": "Send Report Email",
+      "position": {
+        "x": 1100,
+        "y": 50
+      },
+      "data": {
+        "to_email": "{{email_data.from}}",
+        "subject": "Report Generated: {{email_data.subject}}",
+        "body": "Your requested report has been generated and is attached.\n\nGenerated at: {{generated_at}}\n\nBest regards,\nPocketFlow"
+      }
+    },
+    {
+      "id": "log-2",
+      "type": "LogNode",
+      "name": "Log Completion",
+      "position": {
+        "x": 1300,
+        "y": 50
+      },
+      "data": {
+        "message": "Report workflow completed successfully",
+        "log_level": "INFO"
+      }
+    },
+    {
+      "id": "email-reply-1",
+      "type": "SendEmailAction",
+      "name": "Send Simple Reply",
+      "position": {
+        "x": 700,
+        "y": 150
+      },
+      "data": {
+        "to_email": "{{email_data.from}}",
+        "subject": "Re: {{email_data.subject}}",
+        "body": "Thank you for your email. I'm not able to generate a report for this request, but I can help with other tasks.\n\nBest regards,\nPocketFlow"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "trigger-1",
+      "target": "log-1",
+      "sourceHandle": "email_data",
+      "targetHandle": "data_to_log"
+    },
+    {
+      "id": "edge-2",
+      "source": "log-1",
+      "target": "condition-1"
+    },
+    {
+      "id": "edge-3",
+      "source": "condition-1",
+      "target": "search-1",
+      "condition": "true"
+    },
+    {
+      "id": "edge-4",
+      "source": "search-1",
+      "target": "latex-1"
+    },
+    {
+      "id": "edge-5",
+      "source": "latex-1",
+      "target": "email-1"
+    },
+    {
+      "id": "edge-6",
+      "source": "email-1",
+      "target": "log-2"
+    },
+    {
+      "id": "edge-7",
+      "source": "condition-1",
+      "target": "email-reply-1",
+      "condition": "false"
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "author": "PocketFlow",
+    "category": "email-processing",
+    "tags": ["email", "latex", "report", "automation"]
+  },
+  "createdAt": 1704067200,
+  "updatedAt": 1704067200
+} 
