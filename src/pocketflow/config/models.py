@@ -40,16 +40,6 @@ class ContentConfig(BaseModel):
     quality_settings: Dict[str, Any] = Field(default_factory=dict, description="Quality settings per type")
 
 
-class BitcoinConfig(BaseModel):
-    """Bitcoin service configuration."""
-    electrum_host: str = Field(default="localhost", description="Electrum host")
-    electrum_port: int = Field(default=50001, description="Electrum port")
-    username: Optional[str] = Field(default=None, description="Electrum username")
-    password: Optional[str] = Field(default=None, description="Electrum password")
-    network: str = Field(default="mainnet", description="Bitcoin network")
-    token_price_usd: float = Field(default=0.01, description="Token price in USD")
-
-
 class DatabaseConfig(BaseModel):
     """Database configuration."""
     url: str = Field(description="Database URL")
@@ -69,7 +59,7 @@ class LoggingConfig(BaseModel):
 
 class FlowConfig(BaseModel):
     """Flow configuration."""
-    timeout: int = Field(default=300, description="Flow timeout in seconds")
+    timeout: int = Field(default=900, description="Flow timeout in seconds (15 minutes to allow for slow LLM calls)")
     max_retries: int = Field(default=3, description="Maximum retries per node")
     enable_monitoring: bool = Field(default=True, description="Enable flow monitoring")
     parallel_execution: bool = Field(default=False, description="Enable parallel node execution")
@@ -90,7 +80,6 @@ class ConfigModel(BaseModel):
     email: EmailConfig = Field(description="Email configuration")
     llm: LLMConfig = Field(description="LLM configuration")
     content: ContentConfig = Field(description="Content generation configuration")
-    bitcoin: BitcoinConfig = Field(description="Bitcoin configuration")
     database: DatabaseConfig = Field(description="Database configuration")
     logging: LoggingConfig = Field(description="Logging configuration")
     flow: FlowConfig = Field(description="Flow configuration")

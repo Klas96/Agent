@@ -10,6 +10,7 @@ from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
 from ...utils.prompt_utils import replace_variables_in_text
 from ...utils.user_utils import is_registered_user
+from ...utils.email_utils import build_threading_headers
 from ...services.email_service import EmailService
 from ...config.settings import get_settings
 
@@ -62,6 +63,22 @@ class TokenlessSendEmailNode(Node):
         body_with_vars_replaced = replace_variables_in_text(body, shared, sender_email)
         to_with_vars_replaced = replace_variables_in_text(to, shared, sender_email)
         
+        # Validate that body is not empty after variable replacement
+        if not body_with_vars_replaced or not body_with_vars_replaced.strip():
+            logger.warning("Email body is empty after variable replacement. Using fallback message.")
+            # Use fallback message if body is empty
+            original_subject = email.get("subject", "")
+            body_with_vars_replaced = f"""Hi there!
+
+I received your email about: {original_subject or 'your request'}
+
+I'm processing your request, but I wasn't able to generate a specific response. Please try rephrasing your question or request.
+
+Thanks for using PocketFlow!
+
+Best regards,
+PocketFlow Assistant"""
+        
         logger.info(f"Replaced variables in email body and to field for {sender_email}")
         logger.info(f"Original to: '{to}', Replaced to: '{to_with_vars_replaced}'")
         
@@ -78,11 +95,10 @@ class TokenlessSendEmailNode(Node):
             else:
                 logger.info(f"Tokenless user {sender_email} sending to registered user {to_with_vars_replaced} - allowed")
         
-        # Get payment info and Bitcoin address
+        # Get payment info
         payment_info = getattr(shared, 'reply_body', None)
-        btc_address = getattr(shared, 'btc_address', None)
         
-        return email_service, to_with_vars_replaced, subject, body_with_vars_replaced, params, email, payment_info, btc_address
+        return email_service, to_with_vars_replaced, subject, body_with_vars_replaced, params, email, payment_info
     
     def exec(self, prep_result):
         """Execute by sending the email."""
@@ -93,31 +109,26 @@ class TokenlessSendEmailNode(Node):
         if prep_result == "error":
             return None
             
-        email_service, to, subject, body, params, email, payment_info, btc_address = prep_result
+        email_service, to, subject, body, params, email, payment_info = prep_result
         
-        # Set up proper reply headers for email threading
-        original_message_id = email.get("message_id")
-        original_references = email.get("references")
+        # Build deterministic threading headers using helper function
+        in_reply_to, references = build_threading_headers(
+            original_message_id=email.get("message_id"),
+            original_in_reply_to=email.get("in_reply_to"),
+            original_references=email.get("references"),
+            thread_id=email.get("thread_id"),
+            email_id=email.get("id")
+        )
         
-        # For In-Reply-To, use the original message ID
-        in_reply_to = email.get("in_reply_to") or original_message_id
+        # Log threading headers for debugging
+        logger.info(f"Threading headers - In-Reply-To: {in_reply_to}, References: {references}")
+        logger.info(f"  Original message_id: {email.get('message_id')}")
+        logger.info(f"  Original in_reply_to: {email.get('in_reply_to')}")
+        logger.info(f"  Original references: {email.get('references')}")
         
-        # For References, build the proper chain
-        if original_references and original_message_id:
-            # Append the original message_id to existing references
-            # Ensure proper spacing and format
-            references = f"{original_references} {original_message_id}"
-        else:
-            # For first reply, References should be the same as In-Reply-To
-            # This is the standard format that most email clients expect
-            references = in_reply_to
-        
-        # Debug logging for threading headers
-        logger.info(f"Original email message_id: {email.get('message_id')}")
-        logger.info(f"Original email in_reply_to: {email.get('in_reply_to')}")
-        logger.info(f"Original email references: {email.get('references')}")
-        logger.info(f"Setting In-Reply-To: {in_reply_to}")
-        logger.info(f"Setting References: {references}")
+        # Warn if no threading identifier available
+        if not in_reply_to:
+            logger.error("No threading identifier available - email will not be threaded properly!")
         
         # Modify subject for proper reply threading
         original_subject = email.get("subject", "")
@@ -142,20 +153,8 @@ class TokenlessSendEmailNode(Node):
         if payment_info:
             combined_body = f"{body}\n\n---\n\n**Payment Information:**\n{payment_info}"
         else:
-            # For tokenless users, always include a payment note with Bitcoin address
-            if btc_address:
-                payment_note = f"""---
-
-**Payment Information:**
-You're currently using the free trial. To access the full service with unlimited features, you can purchase tokens by sending Bitcoin to:
-
-**Bitcoin Address:** `{btc_address}`
-
-Payment details will be included in future responses if you're interested in upgrading.
-
-*This is a tokenless user response*"""
-            else:
-                payment_note = """---
+            # For tokenless users, include a payment note
+            payment_note = """---
 
 **Payment Information:**
 You're currently using the free trial. To access the full service with unlimited features, you can purchase tokens. Payment details will be included in future responses if you're interested in upgrading.
@@ -192,7 +191,7 @@ You're currently using the free trial. To access the full service with unlimited
             
             # Only mark as replied if the email was sent to the original sender
             if prep_res:
-                email_service, to, subject, body, params, email, payment_info, btc_address = prep_res
+                email_service, to, subject, body, params, email, payment_info = prep_res
                 
                 # Extract original sender email
                 from_field = email.get("from", "")

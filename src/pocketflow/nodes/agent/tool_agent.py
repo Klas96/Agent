@@ -38,20 +38,50 @@ class ToolAgentNode(SimpleNode):
         try:
             self.logger.info("Processing tool-enabled agent request...")
             
+            # Validate shared state has required data
+            if not shared.email and not shared.user:
+                self.logger.error("No email or user data in shared state")
+                raise ValueError("Missing email or user data in shared state")
+            
             # Build messages for LLM
-            messages = self._build_messages(shared)
+            try:
+                messages = self._build_messages(shared)
+            except Exception as build_error:
+                self.logger.error(f"Failed to build messages: {build_error}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
             
             if not messages:
                 self.logger.warning("No messages to send to LLM")
                 return {"route": "finish", "error": "No conversation context"}
             
+            self.logger.info(f"Calling LLM with {len(messages)} messages")
+            
             # Call LLM service
-            response = self.llm_service.call_llm(messages)
-            self.logger.info(f"LLM response received: {response[:100]}...")
+            try:
+                response = self.llm_service.call_llm(messages)
+                self.logger.info(f"LLM response received: {response[:100] if response else 'None'}...")
+            except Exception as llm_error:
+                self.logger.error(f"LLM service call failed: {llm_error}")
+                import traceback
+                self.logger.error(f"LLM error traceback: {traceback.format_exc()}")
+                raise
+            
+            if not response or not response.strip():
+                self.logger.error("LLM returned empty response")
+                raise ValueError("LLM returned empty response")
             
             # Extract actions from response
-            actions = extract_all_actions_from_json(response or "")
-            self.logger.info(f"Extracted actions: {actions}")
+            try:
+                actions = extract_all_actions_from_json(response or "")
+                self.logger.info(f"Extracted actions: {actions}")
+            except Exception as extract_error:
+                self.logger.error(f"Failed to extract actions from LLM response: {extract_error}")
+                self.logger.error(f"LLM response was: {response[:500]}")
+                import traceback
+                self.logger.error(f"Extraction error traceback: {traceback.format_exc()}")
+                raise
             
             # Validate actions
             valid = (
@@ -63,6 +93,7 @@ class ToolAgentNode(SimpleNode):
             
             if not valid:
                 self.logger.warning("Invalid actions extracted from LLM response")
+                self.logger.warning(f"Actions data: {actions}")
                 return {"route": "finish", "error": "Invalid LLM response format"}
             
             # Store actions in shared state
@@ -81,8 +112,67 @@ class ToolAgentNode(SimpleNode):
             return {"route": action_type}
             
         except Exception as e:
+            import traceback
+            error_traceback = traceback.format_exc()
             self.logger.error(f"Unexpected error in ToolAgentNode: {e}")
-            return {"route": "finish", "error": f"Tool agent error: {e}"}
+            self.logger.error(f"Full traceback:\n{error_traceback}")
+            
+            # Store error in shared state for debugging
+            shared.last_error = str(e)
+            
+            # If LLM fails, create a fallback response to ensure user gets a reply
+            self.logger.warning("LLM call failed, creating fallback response")
+            
+            # Create a simple fallback action to send a response
+            email = shared.email or {}
+            email_body = email.get("body", "")
+            
+            # Generate a more informative acknowledgment response
+            # Include the error type but not the full traceback (for user-facing message)
+            error_type = type(e).__name__
+            if "LLM" in error_type or "Connection" in error_type or "Timeout" in error_type:
+                fallback_response = f"""Hi there!
+
+I received your email, but I'm having trouble connecting to the AI service right now. This might be a temporary issue.
+
+Please try sending your message again in a few moments. If the problem persists, the issue may be with the AI service connection.
+
+Error type: {error_type}
+
+Thanks for your patience!
+
+Best regards,
+PocketFlow Assistant"""
+            else:
+                fallback_response = f"""Hi there!
+
+I received your email, but I encountered an unexpected error while processing it.
+
+Error: {error_type}
+
+Please try rephrasing your request or sending it again. If the problem continues, please contact support.
+
+Thanks for using PocketFlow!
+
+Best regards,
+PocketFlow Assistant"""
+            
+            # Create a send action as fallback
+            fallback_action = {
+                "action": "send",
+                "parameters": {
+                    "to": shared.user or email.get("from", ""),
+                    "subject": f"Re: {email.get('subject', 'Your message')}",
+                    "body": fallback_response
+                }
+            }
+            
+            # Store the fallback action
+            shared.action_queue = [fallback_action]
+            shared.agent_response = fallback_response
+            
+            self.logger.info("Created fallback response action")
+            return {"route": "send", "error": f"LLM failed, using fallback: {e}"}
     
     def _build_messages(self, shared: SharedState) -> List[Dict[str, str]]:
         """
@@ -164,7 +254,8 @@ You MUST use tools when users ask about:
 - **Web searches**: Use the web search tool
 - **File operations**: Use file read/write tools
 - **Database queries**: Use the database tool
-- **Podcast generation**: Use the podcastify tool for high-quality podcast creation
+- **Document generation**: Use the generate_document tool (via Libriscribe MCP) for professional documents
+- **Podcast generation**: Use the podcastify tool (via Podcastfy MCP) for high-quality podcast episodes
 
 When using tools, include them in your action list before sending the response.
 """
@@ -173,26 +264,43 @@ When using tools, include them in your action list before sending the response.
     
     def _register_tools(self) -> None:
         """Register all available tools with the registry."""
-        from ...tools import (
-            WebSearchTool, CalculatorTool, FileReadTool, FileWriteTool,
-            DatabaseQueryTool, WeatherTool, PolymarketTool, EmailSearchTool, EmailSendTool,
-            PodcastifyTool
+        # Import MCP tools (external processes)
+        from ...tools.mcp_tools import (
+            LibriscribeDocumentTool,
+            LibriscribeResearchTool,
+            LibriscribeOutlineTool,
+            PodcastfyTool
         )
         
-        tools = [
-            WebSearchTool(),
-            CalculatorTool(),
-            FileReadTool(),
-            FileWriteTool(),
-            DatabaseQueryTool(),
-            WeatherTool(),
-            PolymarketTool(),
-            EmailSearchTool(),
-            EmailSendTool(),
-            PodcastifyTool()
+        # Import remaining internal tools (utilities that don't have MCP equivalents)
+        from ...tools import (
+            DatabaseQueryTool, EmailSearchTool, EmailSendTool
+        )
+        
+        # Tools moved to MPC processes:
+        # - WebSearchTool -> Research-MPC
+        # - CalculatorTool, FileReadTool, FileWriteTool -> Tools-MPC
+        # - WeatherTool, PolymarketTool -> Tools-MPC
+        
+        # Register MCP tools (external processes)
+        mcp_tools = [
+            LibriscribeDocumentTool(),  # Replaces internal document generation
+            LibriscribeResearchTool(),  # Research via Libriscribe
+            LibriscribeOutlineTool(),   # Outline creation via Libriscribe
+            PodcastfyTool(),            # Podcast generation via Podcastfy MCP
         ]
         
-        for tool in tools:
+        # Register utility tools (internal, lightweight utilities)
+        # Note: WebSearchTool, CalculatorTool, FileReadTool, FileWriteTool, WeatherTool, 
+        # and PolymarketTool have been moved to MPC processes
+        utility_tools = [
+            DatabaseQueryTool(),
+            EmailSearchTool(),
+            EmailSendTool(),
+        ]
+        
+        # Register all tools
+        for tool in mcp_tools + utility_tools:
             agent_tool_registry.register_tool(tool)
     
     def _generate_agent_prompt(self, user_input: str, context: str, user_email: str, available_tools: List[Dict[str, Any]]) -> str:
@@ -231,8 +339,9 @@ You are a helpful AI assistant with access to various tools. You can use these t
 3. If you need tools, specify which ones to use and with what parameters
 4. Provide a helpful response based on the results
 
-### SPECIAL INSTRUCTIONS FOR PODCAST GENERATION
-When users ask for podcast generation (e.g., "make a podcast", "generate a podcast", "create a podcast"), you MUST use the podcastify tool instead of the basic content generation. The podcastify tool creates high-quality podcast episodes with proper structure, script, and audio.
+### SPECIAL INSTRUCTIONS FOR CONTENT GENERATION
+- **Document generation**: When users ask for document generation (e.g., "create a report", "generate a document", "write a document"), you MUST use the generate_document tool (via Libriscribe MCP) instead of the basic content generation. The generate_document tool creates professional documents with proper structure and formatting.
+- **Podcast generation**: When users ask for podcast generation (e.g., "make a podcast", "generate a podcast", "create a podcast"), you MUST use the podcastify tool (via Podcastfy MCP) instead of the basic content generation. The podcastify tool creates high-quality podcast episodes with proper structure, script, and audio.
 
 ### RESPONSE FORMAT
 Respond in the following YAML format:
@@ -284,7 +393,7 @@ tools:
 Example 3 - Using podcastify for podcast generation:
 ```yaml
 thinking: |
-    The user wants a podcast about local LLMs. I should use the podcastify tool to create a high-quality podcast episode.
+    The user wants a podcast about local LLMs. I should use the podcastify tool (via Podcastfy MCP) to create a high-quality podcast episode.
 
 response: |
     I'll create a podcast about local LLMs for you using the podcastify tool.
@@ -295,8 +404,23 @@ tools:
       topic: "Local LLMs and their applications"
       duration_minutes: 10
       style: "conversational"
-      target_audience: "general"
       voice_preference: "professional"
+      output_format: "mp3"
+```
+
+Example 4 - Using generate_document for document generation:
+```yaml
+thinking: |
+    The user wants a document about local LLMs. I should use the generate_document tool (via Libriscribe MCP) to create a professional document.
+
+response: |
+    I'll create a document about local LLMs for you using the generate_document tool.
+
+tools:
+  - name: generate_document
+    parameters:
+      prompt: "Local LLMs and their applications"
+      document_type: "report"
       output_format: "wav"
 ```
 

@@ -1,6 +1,6 @@
 # PocketFlow
 
-An AI-powered email processing and content generation system with Bitcoin payment integration.
+An AI-powered email processing and content generation system.
 
 ## 🚀 Quick Start
 
@@ -16,9 +16,6 @@ python main.py
 
 # Run the main application (production)
 sudo systemctl start pocketflow.service
-
-# Start the web control panel
-python control_panel.py
 
 # Run tests
 python tests/run_tests.py
@@ -54,7 +51,6 @@ pytest tests/
 PocketFlow/
 ├── README.md                    # This file
 ├── main.py                      # Main application entry point
-├── control_panel.py             # Web control panel
 ├── deploy.sh                    # Deployment script
 ├── install-system.sh            # System installation script
 ├── manage_services.sh           # Service management script
@@ -73,7 +69,6 @@ PocketFlow/
 │   ├── flows/                  # Flow implementations
 │   ├── nodes/                  # Node implementations
 │   ├── services/               # External service integrations
-│   ├── web/                    # Web control panel
 │   ├── agents/                 # AI agent implementations
 │   ├── config/                 # Configuration management
 │   ├── utils/                  # Utility functions
@@ -94,7 +89,6 @@ PocketFlow/
 ### 🤖 AI-Powered Email Processing
 - **Intelligent Email Routing**: Automatically detects and routes emails based on content
 - **Token-Based Access Control**: Users require tokens for premium features
-- **Bitcoin Payment Integration**: Seamless payment processing for token purchases
 - **Multi-Flow Architecture**: Supports different workflows for different user types
 
 ### 📧 Email Services
@@ -115,15 +109,8 @@ PocketFlow/
 - **Report Generation**: Automated report creation from research
 
 ### 💰 Payment System
-- **Bitcoin Integration**: Direct Bitcoin payment processing via Electrum
 - **Token Management**: User token tracking and management
 - **Payment Verification**: Automated payment confirmation
-
-### 🖥️ Web Control Panel
-- **Admin Dashboard**: Comprehensive system monitoring
-- **User Management**: Add, edit, and manage users
-- **Payment Tracking**: Monitor Bitcoin transactions
-- **System Statistics**: Real-time system metrics
 
 ## 🚀 Recent Updates
 
@@ -131,8 +118,6 @@ PocketFlow/
 - ✅ Professional LaTeX document generation
 - ✅ Comprehensive test coverage
 - ✅ Automated deployment pipeline
-- ✅ Bitcoin payment integration
-- ✅ Web control panel
 - ✅ Multi-flow architecture
 - ✅ Token-based access control
 - ✅ System service management
@@ -153,10 +138,6 @@ EMAIL_PASSWORD=your-password
 OLLAMA_HOST=192.168.1.7
 OLLAMA_PORT=11434
 OLLAMA_MODEL=llama3:latest
-
-# Bitcoin Configuration
-ELECTRUM_HOST=localhost
-ELECTRUM_PORT=50001
 
 # Database
 DATABASE_URL=sqlite:///pocketflow.db

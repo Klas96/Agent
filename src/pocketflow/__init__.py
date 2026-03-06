@@ -6,7 +6,6 @@ This package provides a complete email processing system with:
 - Service layer for external integrations
 - Dynamic flow selection
 - Token-based user management
-- Bitcoin payment integration
 """
 
 # Core imports
@@ -17,7 +16,6 @@ from .core.types import (
     EmailSendRequest,
     ContentGenerationRequest,
     InvestigationRequest,
-    PaymentRequest,
     AgentAction
 )
 
@@ -26,11 +24,13 @@ from .core.node import Node, SimpleNode
 
 # Service layer imports
 from .services import (
-    email_service,
-    llm_service,
-    content_service,
-    websearch_service,
-    database_service
+    EmailService,
+    LLMService,
+    DatabaseService,
+    ConversationService,
+    MCPClient,
+    MPCManager,
+    get_mpc_manager
 )
 
 # Node imports
@@ -44,21 +44,24 @@ from .nodes import (
     AgentNode,
     PopAgentActionNode,
     
-    # Content nodes
-    ContentCreatorNode,
-    ContentParamNode,
-    GenerateContentNode,
+    # MPC wrapper nodes (content/investigation nodes moved to MPC processes)
+    MPCContentGeneratorNode,
+    MPCToolExecutorNode,
+    MPCInvestigatorNode,
     
-    # Investigation nodes
-    InvestigateTopicNode
+    # User status nodes
+    UserStatusCheckNode,
+    TokenValidationNode,
+    TokenConsumptionNode,
+    FlowRoutingNode,
+    FinishNode
 )
 
 # Flow imports
 from .flows import (
     EmailProcessorFlow,
     TokenlessUserFlow,
-    ContentGenerationFlow,
-    InvestigationFlow
+    # ContentGenerationFlow and InvestigationFlow moved to MPC processes
 )
 
 from .flows.manager import flow_manager
@@ -71,8 +74,7 @@ from .utils.errors import (
     EmailError,
     LLMError,
     ContentGenerationError,
-    BitcoinError,
-    WebSearchError
+    # BitcoinError and WebSearchError removed (functionality moved to MPC)
 )
 
 # Convenience functions
@@ -155,7 +157,6 @@ __all__ = [
     "EmailSendRequest",
     "ContentGenerationRequest",
     "InvestigationRequest",
-    "PaymentRequest",
     "AgentAction",
     
     # Core classes
@@ -166,10 +167,13 @@ __all__ = [
     "SimpleNode",
     
     # Services
-    "email_service",
-    "llm_service", 
-    "content_service",
-    "websearch_service",
+    "EmailService",
+    "LLMService",
+    "DatabaseService",
+    "ConversationService",
+    "MCPClient",
+    "MPCManager",
+    "get_mpc_manager",
     
     # Nodes
     "FetchEmailNode",
@@ -177,16 +181,18 @@ __all__ = [
     "ConversationContextNode",
     "AgentNode",
     "PopAgentActionNode",
-    "ContentCreatorNode",
-    "ContentParamNode",
-    "GenerateContentNode",
-    "InvestigateTopicNode",
+    "MPCContentGeneratorNode",
+    "MPCToolExecutorNode",
+    "MPCInvestigatorNode",
+    "UserStatusCheckNode",
+    "TokenValidationNode",
+    "TokenConsumptionNode",
+    "FlowRoutingNode",
+    "FinishNode",
     
     # Flows
     "EmailProcessorFlow",
     "TokenlessUserFlow",
-    "ContentGenerationFlow",
-    "InvestigationFlow",
     "flow_manager",
     
     # Configuration and utilities
@@ -198,8 +204,6 @@ __all__ = [
     "EmailError",
     "LLMError",
     "ContentGenerationError",
-    "BitcoinError",
-    "WebSearchError",
     
     # Convenience functions
     "create_flow",

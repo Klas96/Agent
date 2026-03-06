@@ -7,7 +7,7 @@ flows:
     description: "Unified flow for all users"
     flow_type: "user"
     requires_tokens: false
-    timeout: 300
+    timeout: 900  # 15 minutes to allow for slow LLM calls
     steps:
       - fetch_email
       - check_user_status
@@ -28,12 +28,6 @@ flows:
         default: send_email
       send_email:
         default: finish
-
-# Donation amounts (suggested)
-donation_amounts:
-  small: "0.0005 BTC"
-  medium: "0.001 BTC"
-  large: "0.005 BTC"
 
 # Donation messages
 donation_messages:

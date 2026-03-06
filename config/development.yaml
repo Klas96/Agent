@@ -40,14 +40,6 @@ content:
       format: "pdf"
       template: "default"
 
-bitcoin:
-  electrum_host: localhost
-  electrum_port: 50001
-  username: null
-  password: null
-  network: mainnet
-  token_price_usd: 0.01
-
 database:
   url: sqlite:///pocketflow_dev.db
   pool_size: 5
@@ -62,7 +54,7 @@ logging:
   backup_count: 3
 
 flow:
-  timeout: 300
+  timeout: 900  # 15 minutes to allow for slow LLM calls
   max_retries: 3
   enable_monitoring: true
   parallel_execution: false

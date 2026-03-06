@@ -32,11 +32,11 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = Field(default=None, env="GOOGLE_API_KEY")
     OLLAMA_HOST: str = Field(default="localhost", env="OLLAMA_HOST")
     OLLAMA_PORT: int = Field(default=11434, env="OLLAMA_PORT")
-    OLLAMA_MODEL: str = Field(default="llama3.1:latest", env="OLLAMA_MODEL")
+    OLLAMA_MODEL: str = Field(default="llama3:latest", env="OLLAMA_MODEL")
     LLM_MODEL: str = Field(default="gpt-4", env="LLM_MODEL")
     LLM_MAX_TOKENS: int = Field(default=4000, env="LLM_MAX_TOKENS")
     LLM_TEMPERATURE: float = Field(default=0.7, env="LLM_TEMPERATURE")
-    LLM_TIMEOUT: int = Field(default=60, env="LLM_TIMEOUT")  # 60 seconds
+    LLM_TIMEOUT: int = Field(default=600, env="LLM_TIMEOUT")  # 600 seconds (10 minutes) for slower models
     
     # Content Generation
     CONTENT_OUTPUT_DIR: str = Field(default="/opt/pocketflow/data/generated", env="CONTENT_OUTPUT_DIR")
@@ -50,11 +50,17 @@ class Settings(BaseSettings):
     LOG_FILE: Optional[str] = Field(default=None, env="LOG_FILE")
     
     # Flow Configuration
-    FLOW_TIMEOUT: int = Field(default=300, env="FLOW_TIMEOUT")  # 5 minutes
+    FLOW_TIMEOUT: int = Field(default=900, env="FLOW_TIMEOUT")  # 15 minutes (to allow for slow LLM calls)
     MAX_RETRIES: int = Field(default=3, env="MAX_RETRIES")
     
     # Security
     TOKEN_PRICE_USD: float = Field(default=0.01, env="TOKEN_PRICE_USD")
+    
+    # MPC (Multi-Process Communication) Configuration
+    CONTENT_MPC_URL: str = Field(default="http://localhost:8001", env="CONTENT_MPC_URL")
+    TOOLS_MPC_URL: str = Field(default="http://localhost:8003", env="TOOLS_MPC_URL")
+    RESEARCH_MPC_URL: str = Field(default="http://localhost:8004", env="RESEARCH_MPC_URL")
+    MPC_FALLBACK_MODE: bool = Field(default=False, env="MPC_FALLBACK_MODE")
     
     # Flask Configuration
     SECRET_KEY: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")

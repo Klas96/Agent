@@ -1,7 +1,7 @@
 """
 Database service for PocketFlow.
 
-This module provides database operations for user management and BTC addresses.
+This module provides database operations for user management.
 """
 
 import os
@@ -10,7 +10,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
-from ..core.types import User, BTCAddress, DonationTransaction
+from ..core.types import User
 from ..config.settings import get_settings
 from ..utils.errors import DatabaseError
 from ..utils.logging import get_logger

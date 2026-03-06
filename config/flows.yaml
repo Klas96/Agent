@@ -7,7 +7,7 @@ flows:
     description: "Full functionality for users with tokens"
     flow_type: "tokened_user"
     requires_tokens: true
-    timeout: 300
+    timeout: 900  # 15 minutes to allow for slow LLM calls
     steps:
       - fetch_email
       - check_user_status

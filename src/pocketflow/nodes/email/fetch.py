@@ -50,12 +50,8 @@ class FetchEmailNode(Node):
             shared.user = user_email
             logger.info(f"Fetched email: {email_data.subject} from {user_email}")
             
-            # Mark email as read after successful processing
-            try:
-                prep_res.mark_as_read(email_data.id)
-                logger.info(f"Marked email {email_data.id} as read after successful processing")
-            except Exception as e:
-                logger.warning(f"Failed to mark email {email_data.id} as read: {e}")
+            # Don't mark email as read here - let the postprocess node handle it after successful processing
+            logger.info(f"Email {email_data.id} queued for processing")
             
             return "default"
         else:

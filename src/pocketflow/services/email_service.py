@@ -151,23 +151,7 @@ class EmailService:
                 msg['Cc'] = request.cc
             msg['Subject'] = request.subject
             
-            # Add threading headers for proper email threading
-            if request.in_reply_to:
-                msg['In-Reply-To'] = request.in_reply_to
-                msg['References'] = request.references if request.references else request.in_reply_to
-                
-                # Gmail-specific threading headers for better compatibility
-                msg['X-Google-Original-Message-ID'] = request.in_reply_to
-                msg['X-Google-Thread-ID'] = request.in_reply_to
-                # Generic threading headers for better compatibility
-                msg['X-Thread-Index'] = request.in_reply_to
-                msg['X-Thread-Topic'] = request.subject
-                
-                # Additional headers that help with Gmail threading
-                msg['X-Original-Message-ID'] = request.in_reply_to
-                msg['X-Reply-To'] = request.in_reply_to
-            
-            # Add Message-ID for proper threading
+            # Add Message-ID for proper threading (must be set before threading headers)
             import uuid
             import time
             # Use the actual email domain for Message-ID
@@ -178,6 +162,26 @@ class EmailService:
             msg['Message-ID'] = message_id
             self.logger.info(f"Setting Message-ID header: {message_id}")
             
+            # Add threading headers for proper email threading
+            if request.in_reply_to:
+                # Set standard RFC 5322 threading headers
+                msg['In-Reply-To'] = request.in_reply_to
+                
+                # Use the References header built by build_threading_headers()
+                # It already includes all necessary message IDs in the thread
+                if request.references:
+                    msg['References'] = request.references
+                else:
+                    # Fallback: use in_reply_to as references if not provided
+                    msg['References'] = request.in_reply_to
+                
+                # Additional headers for better email client compatibility
+                msg['X-Mailer'] = 'PocketFlow Email Agent'
+                msg['X-Thread-Id'] = request.in_reply_to
+                
+                # Gmail-specific threading headers (optional, but helps with Gmail)
+                msg['X-Google-Original-Message-ID'] = request.in_reply_to
+                
             # Log all headers for debugging
             self.logger.info("Final email headers:")
             for header, value in msg.items():
@@ -189,21 +193,6 @@ class EmailService:
             self.logger.info(f"  References: {msg.get('References', 'NOT SET')}")
             self.logger.info(f"  Message-ID: {msg.get('Message-ID', 'NOT SET')}")
             self.logger.info(f"  Subject: {msg.get('Subject', 'NOT SET')}")
-            
-            # Add additional headers that some email clients require for threading
-            msg['X-Mailer'] = 'PocketFlow Email Agent'
-            msg['X-Thread-Id'] = request.in_reply_to if request.in_reply_to else message_id
-            
-            # Add headers for better email client compatibility
-            if request.in_reply_to:
-                msg['X-Original-Message-ID'] = request.in_reply_to
-                msg['X-Reply-To'] = request.in_reply_to
-                # Gmail-specific threading headers
-                msg['X-Google-Original-Message-ID'] = request.in_reply_to
-                msg['X-Google-Thread-ID'] = request.in_reply_to
-                # Generic threading headers for better compatibility
-                msg['X-Thread-Index'] = request.in_reply_to
-                msg['X-Thread-Topic'] = request.subject
             
             # Add body
             msg.attach(MIMEText(request.body, 'plain', 'utf8'))
@@ -311,25 +300,32 @@ class EmailService:
     def _parse_email_message(self, email_message: email.message.Message, email_id: str) -> Optional[EmailData]:
         """Parse email message into EmailData object."""
         try:
+            # Import here to avoid circular dependency
+            from ..utils.email_utils import normalize_message_id
+            
             # Extract headers
             subject = email_message.get('Subject', '')
             from_header = email_message.get('From', '')
             to_header = email_message.get('To', '')
-            message_id = email_message.get('Message-ID', '')
-            in_reply_to = email_message.get('In-Reply-To', '')
+            message_id_raw = email_message.get('Message-ID', '')
+            in_reply_to_raw = email_message.get('In-Reply-To', '')
             references = email_message.get('References', '')
+            
+            # Normalize Message-IDs for deterministic threading
+            message_id = normalize_message_id(message_id_raw) if message_id_raw else None
+            in_reply_to = normalize_message_id(in_reply_to_raw) if in_reply_to_raw else None
             
             # Debug logging for threading headers
             self.logger.info(f"Parsed email headers for {email_id}:")
             self.logger.info(f"  Subject: {subject}")
-            self.logger.info(f"  Message-ID: {message_id}")
-            self.logger.info(f"  In-Reply-To: {in_reply_to}")
+            self.logger.info(f"  Message-ID (raw): {message_id_raw} -> (normalized): {message_id}")
+            self.logger.info(f"  In-Reply-To (raw): {in_reply_to_raw} -> (normalized): {in_reply_to}")
             self.logger.info(f"  References: {references}")
             
             # Extract body
             body = self._get_email_body(email_message)
             
-            # Extract thread ID (using Message-ID as fallback)
+            # Extract thread ID (using normalized Message-ID as fallback)
             thread_id = in_reply_to or message_id or email_id
             
             return EmailData(
@@ -340,8 +336,8 @@ class EmailService:
                 subject=subject,
                 body=body,
                 received_at=datetime.now(),  # TODO: Parse actual received date
-                message_id=message_id if message_id else None,
-                in_reply_to=in_reply_to if in_reply_to else None,
+                message_id=message_id,
+                in_reply_to=in_reply_to,
                 references=references if references else None
             )
             

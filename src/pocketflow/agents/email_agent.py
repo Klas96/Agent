@@ -7,9 +7,12 @@ with users through email.
 
 from typing import Dict, Any, List
 from ..agents.base_agent import BaseAgent, AgentAction, AgentDecision
-from ..core.types import SharedState
-from ..services import email_service, llm_service
+from ..core.types import SharedState, EmailSendRequest
+from ..services.email_service import EmailService
+from ..services import llm_service
 from ..utils.logging import get_logger
+from ..utils.email_utils import build_threading_headers
+from ..config.settings import get_settings
 
 
 class EmailAgent(BaseAgent):
@@ -205,25 +208,63 @@ Keep responses helpful, concise, and appropriate for email communication.
             return {"success": False, "error": str(e)}
     
     def _send_email_response(self, shared: SharedState, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Send email response to user."""
+        """Send email response to user with proper threading."""
         try:
             response = parameters.get("response", self.conversation_context.get("response", ""))
             user_email = shared.get("user", "")
             
             self.logger.info(f"Sending email response to {user_email}")
             
-            # Prepare email response
-            email_response = {
-                "to": user_email,
-                "subject": "Re: Your request",
-                "body": response,
-                "attachments": []
-            }
+            # Get email service
+            settings = get_settings()
+            email_service = EmailService(settings)
+            
+            # Get original email data for threading
+            email = shared.get("email", {})
+            original_subject = email.get("subject", "")
+            
+            # Build threading headers
+            in_reply_to, references = build_threading_headers(
+                original_message_id=email.get("message_id"),
+                original_in_reply_to=email.get("in_reply_to"),
+                original_references=email.get("references"),
+                thread_id=email.get("thread_id"),
+                email_id=email.get("id")
+            )
+            
+            # Log threading headers for debugging
+            self.logger.info(f"Threading headers - In-Reply-To: {in_reply_to}, References: {references}")
+            
+            # Modify subject for proper reply threading
+            if original_subject and original_subject.strip():
+                # For non-empty subjects, use "Re:" prefix
+                clean_subject = original_subject.strip()
+                if clean_subject.startswith("Re:"):
+                    clean_subject = clean_subject[3:].strip()
+                elif clean_subject.startswith("RE:"):
+                    clean_subject = clean_subject[3:].strip()
+                elif clean_subject.startswith("re:"):
+                    clean_subject = clean_subject[3:].strip()
+                
+                # Add "Re:" prefix for proper threading
+                reply_subject = f"Re: {clean_subject}"
+            else:
+                # For empty subjects, use empty subject for proper threading
+                reply_subject = ""
+            
+            # Prepare email send request with threading headers
+            send_request = EmailSendRequest(
+                to=user_email,
+                subject=reply_subject,
+                body=response,
+                in_reply_to=in_reply_to,
+                references=references
+            )
             
             # Send email
-            result = email_service.send_email(email_response)
+            success = email_service.send_email(send_request)
             
-            if not result.get("success"):
+            if not success:
                 return {"success": False, "error": "Failed to send email"}
             
             # Update conversation history
@@ -235,7 +276,7 @@ Keep responses helpful, concise, and appropriate for email communication.
             })
             shared["conversation_history"] = conversation_history
             
-            self.logger.info("Email response sent successfully")
+            self.logger.info("Email response sent successfully with threading headers")
             
             return {
                 "success": True,
@@ -254,27 +295,42 @@ Keep responses helpful, concise, and appropriate for email communication.
             
             self.logger.info(f"Fetching email for {user_email}")
             
-            # Fetch email
-            result = email_service.fetch_email({
-                "user": user_email,
-                "max_emails": 1
-            })
+            # Get email service
+            settings = get_settings()
+            email_service = EmailService(settings)
             
-            if not result.get("success"):
-                return {"success": False, "error": "Failed to fetch email"}
+            # Fetch unread emails
+            emails = email_service.fetch_unread_emails()
+            
+            if not emails:
+                self.logger.info("No new emails found")
+                return {
+                    "success": True,
+                    "emails_found": 0,
+                    "email": None
+                }
             
             # Update shared state with fetched email
-            emails = result.get("emails", [])
             if emails:
-                shared["email"] = emails[0]
+                # Convert EmailData to dict format
+                email_data = emails[0]
+                shared["email"] = {
+                    "id": email_data.id,
+                    "subject": email_data.subject,
+                    "from": email_data.from_,
+                    "body": email_data.body,
+                    "date": email_data.received_at,
+                    "message_id": email_data.message_id,
+                    "thread_id": email_data.thread_id,
+                    "in_reply_to": email_data.in_reply_to,
+                    "references": email_data.references
+                }
                 self.logger.info("Email fetched successfully")
-            else:
-                self.logger.info("No new emails found")
             
             return {
                 "success": True,
                 "emails_found": len(emails),
-                "email": emails[0] if emails else None
+                "email": shared["email"] if emails else None
             }
             
         except Exception as e:

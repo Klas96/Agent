@@ -10,7 +10,9 @@ from ..core.flow import FlowBuilder, Flow
 from ..core.types import FlowType, SharedState
 from ..nodes.email import FetchEmailNode, SendEmailNode, ConversationContextNode
 from ..nodes.agent import AgentNode, PopAgentActionNode
-from ..nodes.content import ContentCreatorNode
+# ContentCreatorNode moved to MPC - tokenless users should use email_processor flow
+# from ..nodes.content import ContentCreatorNode
+from ..nodes.mpc import MPCContentGeneratorNode
 from ..nodes import FinishNode
 from ..utils.logging import get_logger
 
@@ -29,7 +31,7 @@ class TokenlessUserFlow:
                 .add_step("conversation_context", ConversationContextNode("conversation_context"))
                 .add_step("agent", AgentNode("agent"))
                 .add_step("pop_agent_action", PopAgentActionNode("pop_agent_action"))
-                .add_step("content_generation", ContentCreatorNode("content_generation"))
+                .add_step("content_generation", MPCContentGeneratorNode("content_generation"))
                 .add_step("add_donation_footer", self._create_donation_footer_node())
                 .add_step("send_email", SendEmailNode("send_email"))
                 .add_step("finish", FinishNode("finish"))
@@ -89,7 +91,6 @@ class TokenlessUserFlow:
                 "conversation_management",
                 "llm_processing",
                 "action_management",
-                "bitcoin_address_generation",
                 "email_sending"
             ],
             "restrictions": [

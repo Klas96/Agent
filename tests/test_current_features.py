@@ -6,7 +6,6 @@ This test file covers all the main features currently available in PocketFlow:
 - Email processing (tokenless and tokened users)
 - Content generation (music, documents, etc.)
 - Investigation and web search
-- Bitcoin payment processing
 - Core services (LLM, database, etc.)
 """
 
@@ -25,7 +24,7 @@ from src.pocketflow.core.types import SharedState, FlowType
 from src.pocketflow.flows.manager import FlowManager
 from src.pocketflow.services import (
     EmailService, LLMService, ContentService, DocumentService,
-    BitcoinService, WebSearchService, DatabaseService
+    WebSearchService, DatabaseService
 )
 
 
@@ -165,25 +164,6 @@ class TestCurrentFeatures(unittest.TestCase):
             # Test that service can handle different formats
             pass
     
-    def test_bitcoin_service_functionality(self):
-        """Test Bitcoin service functionality."""
-        bitcoin_service = BitcoinService()
-        
-        # Test Bitcoin service initialization
-        self.assertIsNotNone(bitcoin_service)
-        
-        # Test address generation (mocked)
-        with patch('src.pocketflow.services.bitcoin_service.get_new_btc_address') as mock_gen:
-            mock_gen.return_value = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
-            address = bitcoin_service.generate_address()
-            self.assertEqual(address, "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
-        
-        # Test price fetching (mocked)
-        with patch('src.pocketflow.services.bitcoin_service.get_btc_usd_price') as mock_price:
-            mock_price.return_value = 50000.0
-            price = bitcoin_service.get_current_price()
-            self.assertEqual(price, 50000.0)
-    
     def test_websearch_service_functionality(self):
         """Test web search service functionality."""
         websearch_service = WebSearchService()
@@ -194,7 +174,6 @@ class TestCurrentFeatures(unittest.TestCase):
         # Test search query processing
         test_queries = [
             "latest AI developments",
-            "Bitcoin price today",
             "Python programming tips"
         ]
         
@@ -218,10 +197,7 @@ class TestCurrentFeatures(unittest.TestCase):
             tokens = database_service.get_tokens(test_email)
             self.assertEqual(tokens, 5)
         
-        # Test Bitcoin address management
-        with patch.object(database_service, 'add_btc_address') as mock_add:
-            mock_add.return_value = True
-            result = database_service.add_btc_address(test_email, "bc1qtest")
+        # Test user management
             self.assertTrue(result)
     
     def test_shared_state_functionality(self):
@@ -303,29 +279,12 @@ class TestCurrentFeatures(unittest.TestCase):
         # Test search functionality
         test_queries = [
             "latest technology news",
-            "Bitcoin price analysis",
             "AI research papers"
         ]
         
         for query in test_queries:
             # Test that service can handle different query types
             self.assertIsNotNone(websearch_service)
-    
-    def test_payment_processing_features(self):
-        """Test payment processing features."""
-        from src.pocketflow.services.bitcoin_service import BitcoinService
-        
-        bitcoin_service = BitcoinService()
-        
-        # Test payment calculation
-        test_amount_usd = 10.0
-        test_btc_price = 50000.0
-        expected_btc_amount = test_amount_usd / test_btc_price
-        
-        with patch.object(bitcoin_service, 'get_current_price') as mock_price:
-            mock_price.return_value = test_btc_price
-            calculated_amount = test_amount_usd / bitcoin_service.get_current_price()
-            self.assertEqual(calculated_amount, expected_btc_amount)
     
     def test_error_handling(self):
         """Test error handling in various components."""
@@ -343,7 +302,6 @@ class TestCurrentFeatures(unittest.TestCase):
             LLMService(),
             ContentService(),
             DocumentService(),
-            BitcoinService(),
             WebSearchService(),
             DatabaseService()
         ]

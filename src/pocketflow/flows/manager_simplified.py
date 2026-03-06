@@ -20,7 +20,7 @@ class SimplifiedFlowManager:
                 "description": "Unified flow for all users",
                 "flow_type": FlowType.USER,
                 "requires_tokens": False,
-                "timeout": 300
+                "timeout": 900  # 15 minutes to allow for slow LLM calls
             }
         }
     

@@ -5,21 +5,25 @@ This package contains all external service integrations.
 """
 
 from .conversation_service import ConversationService
-from .document_service import DocumentService
 from .email_service import EmailService
 from .llm_service import LLMService
-from .content_service import ContentService
-from .websearch_service import WebSearchService
 from .database_service import DatabaseService
-from .vector_service import VectorService
+from .mcp_client import MCPClient, LibriscribeMCPClient, PodcastfyMCPClient, MPCManager, get_mpc_manager
+
+# Services moved to MPC processes:
+# - ContentService -> Content-MPC
+# - DocumentService -> Content-MPC
+# - WebSearchService -> Research-MPC
+# - VectorService -> Research-MPC (if used for RAG)
 
 __all__ = [
     "LLMService",
     "EmailService",
     "DatabaseService",
     "ConversationService",
-    "ContentService",
-    "DocumentService",
-    "WebSearchService",
-    "VectorService",
+    "MCPClient",
+    "LibriscribeMCPClient",
+    "PodcastfyMCPClient",
+    "MPCManager",
+    "get_mpc_manager",
 ] 

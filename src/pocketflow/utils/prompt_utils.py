@@ -47,7 +47,7 @@ def build_unified_system_prompt(shared, sender_email):
     try:
         from ..tools.registry import agent_tool_registry
         tools_description = agent_tool_registry.get_available_tools_prompt()
-        tools_info = f"\n\n**AVAILABLE TOOLS:**\n{tools_description}\n\n**TOOL USAGE RULES:**\nYou MUST use tools when users ask about:\n- **Calculations**: Use the calculator tool\n- **Weather**: Use the weather tool\n- **Web searches**: Use the web search tool\n- **File operations**: Use file read/write tools\n- **Database queries**: Use the database tool\n- **Podcast generation**: Use the podcastify tool for high-quality podcast creation\n\nWhen using tools, include them in your action list before sending the response."
+        tools_info = f"\n\n**AVAILABLE TOOLS:**\n{tools_description}\n\n**TOOL USAGE RULES:**\nYou MUST use tools when users ask about:\n- **Calculations**: Use the calculator tool\n- **Weather**: Use the weather tool\n- **Web searches**: Use the web search tool\n- **File operations**: Use file read/write tools\n- **Database queries**: Use the database tool\n- **Document generation**: Use the generate_document tool (via Libriscribe MCP)\n- **Podcast generation**: Use the podcastify tool (via Podcastfy MCP)\n- **Research**: Use the research_topic tool (via Libriscribe MCP)\n\nWhen using tools, include them in your action list before sending the response."
     except Exception as e:
         logger.warning(f"Could not get tools info: {e}")
     
@@ -96,9 +96,9 @@ You can use these variables in your responses - they will be automatically repla
         f"You are a helpful email assistant. The sender is: {sender_email}"
         f"{personality_instruction}\n\n"
         "**CRITICAL EXAMPLE - READ THIS FIRST:**\n"
-        "When user asks: 'Generate a podcast about local LLMs'\n"
+        "When user asks: 'Generate a document about artificial intelligence'\n"
         "You MUST respond with:\n"
-        "```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"podcastify\",\n      \"parameters\": {\n        \"topic\": \"Local LLMs and their applications\",\n        \"duration_minutes\": 10,\n        \"style\": \"conversational\",\n        \"target_audience\": \"general\",\n        \"voice_preference\": \"professional\",\n        \"output_format\": \"wav\"\n      }\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Here is your requested podcast about local LLMs!\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```\n\n"
+        "```json\n[\n  {\n    \"action\": \"use_tool\",\n    \"parameters\": {\n      \"tool_name\": \"generate_document\",\n      \"prompt\": \"Artificial intelligence and its applications\",\n      \"document_type\": \"report\"\n    }\n  },\n  {\n    \"action\": \"send\",\n    \"parameters\": {\n      \"to\": \"{sender_email}\",\n      \"body\": \"Here is your requested document about AI!\"\n    }\n  },\n  {\n    \"action\": \"finish\",\n    \"parameters\": {}\n  }\n]\n```\n\n"
         "**Your primary role is to be welcoming, helpful, and informative about the service.**\n\n"
         "**CRITICAL: You can send emails to any registered user in the system.**\n"
         "**You can reply to the original sender or send to other registered users.**\n"
@@ -127,7 +127,8 @@ You can use these variables in your responses - they will be automatically repla
         "- finish: End the conversation\n\n"
         "**IMPORTANT WORKFLOWS:**\n"
         "1. **Content Generation**: If the user asks to generate content (podcast, song, image, document):\n"
-        "   - For podcasts: Use the 'use_tool' action with 'podcastify' tool for high-quality podcast creation\n"
+        "   - For documents: Use the 'use_tool' action with 'generate_document' tool (via Libriscribe MCP)\n"
+        "   - For podcasts: Use the 'use_tool' action with 'podcastify' tool (via Podcastfy MCP)\n"
         "   - For other content: Use the 'generate' action with the appropriate type and prompt.\n"
         "   - Then, a 'send' action to share the generated content.\n"
         "   - End with 'finish'.\n"
@@ -137,7 +138,8 @@ You can use these variables in your responses - they will be automatically repla
         "   - End with 'finish'.\n\n"
         "**CRITICAL: When the user asks to 'generate', 'create', or 'make' content (podcast, song, image, document), you MUST use the appropriate action first, NOT the 'send' action!**\n\n"
         "**MANDATORY RULE: If the user's email contains words like 'generate', 'create', 'make', 'podcast', 'song', 'music', 'image', 'document', you MUST respond with the appropriate action, NOT a 'send' action!**\n\n"
-        "**PODCAST RULE: When users ask for podcast generation (e.g., 'make a podcast', 'generate a podcast', 'create a podcast'), you MUST use the 'use_tool' action with 'podcastify' tool, NOT the basic 'generate' action!**\n\n"
+        "**DOCUMENT RULE: When users ask for document generation (e.g., 'create a report', 'generate a document', 'write a document'), you MUST use the 'use_tool' action with 'generate_document' tool (via Libriscribe MCP), NOT the basic 'generate' action!**\n\n"
+        "**PODCAST RULE: When users ask for podcast generation (e.g., 'create a podcast', 'generate a podcast', 'make a podcast'), you MUST use the 'use_tool' action with 'podcastify' tool (via Podcastfy MCP), NOT the basic 'generate' action!**\n\n"
         "**CRITICAL INSTRUCTION: When users ask 'Can you generate...' or 'Could you create...', treat this as a DIRECT COMMAND to generate content, not a question. ALWAYS use the appropriate action in these cases!**\n\n"
         "**ABSOLUTE RULE: NEVER respond to content generation requests with a 'send' action. ALWAYS use 'generate' action first!**\n\n"
         "**EXAMPLES OF WHEN TO USE 'generate' ACTION:**\n"
@@ -149,7 +151,9 @@ You can use these variables in your responses - they will be automatically repla
         "**EXAMPLES OF WHEN TO USE 'send' ACTION:**\n"
         "- User asks a question: 'What is AI?' → Use 'send' action\n"
         "- User asks for help: 'Can you help me?' → Use 'send' action\n"
-        "- User asks for information: 'Tell me about Bitcoin' → Use 'send' action\n\n"
+        "- User asks for information: 'Tell me about AI' → Use 'send' action\n\n"
+        "**CRITICAL: The 'body' parameter in 'send' action is REQUIRED and MUST NOT be empty!**\n"
+        "Always provide a meaningful message body that responds to the user's request.\n\n"
         "**Response Style:**\n"
         "- Be warm, welcoming, and helpful\n"
         "- Keep responses concise but informative\n"
@@ -224,7 +228,6 @@ def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
     - {user_name} - The user's display name
     - {user_personality} - The user's personality setting
     - {user_created_at} - When the user account was created
-    - {btc_address} - Bitcoin address for payments
     - {flow_type} - Current flow type
     - {current_date} - Current date and time
     - {email_subject} - Subject of the current email
@@ -247,10 +250,10 @@ def replace_variables_in_text(text: str, shared, sender_email: str) -> str:
     # Define variable replacements
     replacements = {
         '{sender_email}': sender_email,
+        '{user_email}': sender_email,  # Add user_email as alias for sender_email
         '{user_name}': user_info.name if user_info else 'User',
         '{user_personality}': user_info.personality if user_info else 'Be helpful and friendly',
         '{user_created_at}': str(user_info.created_at) if user_info else 'Unknown',
-        '{btc_address}': getattr(shared, 'btc_address', 'Not available'),
         '{flow_type}': getattr(shared, 'flow_type', 'user'),
         '{current_date}': str(datetime.now()),
         '{email_subject}': shared.email.get('subject', 'No subject') if shared.email else 'No subject',

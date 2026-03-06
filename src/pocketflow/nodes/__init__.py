@@ -17,15 +17,24 @@ from .agent import (
     PopAgentActionNode
 )
 
-from .content import (
-    ContentCreatorNode,
-    ContentParamNode,
-    GenerateContentNode,
-    DocumentGeneratorNode
-)
+# Content nodes moved to Content-MPC process
+# from .content import (
+#     ContentCreatorNode,
+#     ContentParamNode,
+#     GenerateContentNode,
+#     DocumentGeneratorNode
+# )
 
-from .investigation import (
-    InvestigateTopicNode
+# Investigation nodes moved to Research-MPC process
+# from .investigation import (
+#     InvestigateTopicNode
+# )
+
+# MPC wrapper nodes (use these instead)
+from .mpc import (
+    MPCContentGeneratorNode,
+    MPCToolExecutorNode,
+    MPCInvestigatorNode
 )
 
 from .user_status import (
@@ -74,14 +83,10 @@ __all__ = [
     "AgentNode",
     "PopAgentActionNode",
     
-    # Content nodes
-    "ContentCreatorNode",
-    "ContentParamNode",
-    "GenerateContentNode",
-    "DocumentGeneratorNode",
-    
-    # Investigation nodes
-    "InvestigateTopicNode",
+    # MPC wrapper nodes (replaces content/investigation nodes)
+    "MPCContentGeneratorNode",
+    "MPCToolExecutorNode",
+    "MPCInvestigatorNode",
     
     # User status nodes
     "UserStatusCheckNode",

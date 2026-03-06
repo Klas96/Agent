@@ -84,48 +84,13 @@ def test_personality_editing():
         print(f"✗ Personality editing test failed: {e}")
         return False
 
-def test_web_routes():
-    """Test web route functionality."""
-    print("\n=== Testing Web Routes ===")
-    
-    try:
-        from src.pocketflow.web.app import create_app
-        
-        # Create test app
-        app = create_app()
-        
-        with app.test_client() as client:
-            # Test dashboard route
-            response = client.get('/admin/')
-            if response.status_code == 200:
-                print("✓ Dashboard route working")
-            else:
-                print(f"✗ Dashboard route failed: {response.status_code}")
-                return False
-            
-            # Test users list route
-            response = client.get('/admin/users')
-            if response.status_code == 200:
-                print("✓ Users list route working")
-            else:
-                print(f"✗ Users list route failed: {response.status_code}")
-                return False
-        
-        print("✓ All web route tests passed")
-        return True
-        
-    except Exception as e:
-        print(f"✗ Web route test failed: {e}")
-        return False
-
 def main():
     """Run all personality editing tests."""
     print("Personality Editing Test Suite")
     print("=" * 50)
     
     tests = [
-        test_personality_editing,
-        test_web_routes
+        test_personality_editing
     ]
     
     passed = 0

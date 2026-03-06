@@ -27,7 +27,6 @@ The PocketFlow root directory contains many files that should be organized or re
 
 ### Service Files → `/scripts/services`
 - `pocketflow-payment-monitor.service`
-- `pocketflow-control-panel.service`
 
 ### Example Files → `/examples`
 - `agent_integration_example.py`

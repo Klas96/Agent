@@ -115,7 +115,10 @@ class GenerateContentNode(SimpleNode):
     
     def _generate_podcast_with_tool(self, content_request, shared: SharedState) -> Optional[str]:
         """
-        Generate podcast using the podcastify tool.
+        Generate podcast using external MCP service (if available).
+        
+        Note: Podcast generation is now handled via external MCP servers.
+        This method is kept for backward compatibility but should use MCP tools.
         
         Args:
             content_request: The content generation request
@@ -125,45 +128,14 @@ class GenerateContentNode(SimpleNode):
             Path to the generated audio file, or None if failed
         """
         try:
-            from ...tools.registry import agent_tool_registry
-            
-            # Get the podcastify tool
-            podcastify_tool = agent_tool_registry.get_tool("podcastify")
-            if not podcastify_tool:
-                self.logger.warning("Podcastify tool not found, falling back to content service")
-                service = ContentService()
-                return service.generate_content(content_request)
-            
-            # Extract topic from the prompt
-            prompt = content_request.prompt
-            duration = getattr(content_request, 'duration', 120)  # Default 2 minutes
-            
-            # Prepare parameters for podcastify tool
-            tool_params = {
-                "topic": prompt,
-                "duration_minutes": max(1, duration // 60),  # Convert seconds to minutes
-                "style": "conversational",
-                "target_audience": "general",
-                "voice_preference": "professional",
-                "output_format": "wav"
-            }
-            
-            self.logger.info(f"Using podcastify tool with parameters: {tool_params}")
-            
-            # Execute the podcastify tool
-            result = podcastify_tool.execute(**tool_params)
-            
-            if result and hasattr(result, 'file_path'):
-                return result.file_path
-            elif result and isinstance(result, dict) and 'file_path' in result:
-                return result['file_path']
-            else:
-                self.logger.warning("Podcastify tool returned unexpected result, falling back to content service")
-                service = ContentService()
-                return service.generate_content(content_request)
+            # Try to use external MCP service for podcast generation
+            # For now, fall back to content service
+            # TODO: Integrate with Podcastfy MCP Server when available
+            self.logger.info("Podcast generation via MCP not yet implemented, using content service")
+            service = ContentService()
+            return service.generate_content(content_request)
                 
         except Exception as e:
-            self.logger.error(f"Error using podcastify tool: {e}")
-            self.logger.info("Falling back to content service")
+            self.logger.error(f"Error generating podcast: {e}")
             service = ContentService()
             return service.generate_content(content_request) 

@@ -86,7 +86,11 @@ class LLMService:
         """Call OpenAI API."""
         try:
             from openai import OpenAI
-            client = OpenAI(api_key=self.settings.OPENAI_API_KEY)
+            timeout = kwargs.get('timeout', self.settings.LLM_TIMEOUT)
+            client = OpenAI(
+                api_key=self.settings.OPENAI_API_KEY,
+                timeout=timeout
+            )
             response = client.chat.completions.create(
                 model=self.settings.LLM_MODEL,
                 messages=messages,
@@ -130,7 +134,8 @@ class LLMService:
             model = self.settings.OLLAMA_MODEL
             temperature = kwargs.get('temperature', self.settings.LLM_TEMPERATURE)
             max_tokens = kwargs.get('max_tokens', self.settings.LLM_MAX_TOKENS)
-            timeout = self.settings.LLM_TIMEOUT
+            # Use LLM_TIMEOUT but ensure it's at least 600 seconds for slow models
+            timeout = max(self.settings.LLM_TIMEOUT, 600)
             
             # Prepare the request data
             data = {
@@ -143,8 +148,10 @@ class LLMService:
                 }
             }
             
-            self.logger.info(f"Calling Ollama LLM at {ollama_url} with model {model}")
-            response = requests.post(ollama_url, json=data, timeout=timeout)
+            self.logger.info(f"Calling Ollama LLM at {ollama_url} with model {model} (timeout: {timeout}s)")
+            # Use a tuple for timeout: (connect_timeout, read_timeout)
+            # This allows the connection to establish quickly but gives more time for the response
+            response = requests.post(ollama_url, json=data, timeout=(10, timeout))
             
             if response.status_code == 200:
                 result = response.json()
@@ -307,7 +314,7 @@ class LLMService:
 You can choose one of these actions:
 - send: Reply to the sender or to a specified recipient.
   - to: recipient email (use {sender_email} to reply to the original sender)
-  - body: email body text
+  - body: email body text (REQUIRED - must not be empty)
   - attachment: full path to the generated file (e.g., /tmp/pocketflow_podcasts/podcast_1234567890.wav)
 - generate: Generate content (sound, image, or document).
   - type: sound, image, or document

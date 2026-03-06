@@ -39,7 +39,8 @@ class Flow:
             name=name,
             nodes=[],
             flow_type=FlowType.TOKENED_USER,
-            requires_tokens=True
+            requires_tokens=True,
+            timeout=900  # Default 15 minutes timeout
         )
         self.steps: Dict[str, FlowStep] = {}
         self.routing: Dict[str, Dict[str, str]] = {}
@@ -117,10 +118,8 @@ class Flow:
             NodeResult containing the final result
         """
         if not self.validate():
-            return NodeResult(
-                success=False,
-                error="Flow validation failed"
-            )
+            # Try to send guaranteed response even if validation fails
+            return self._try_guaranteed_response(shared, "Flow validation failed")
         
         # Set flow type in shared state
         shared.flow_type = self.config.flow_type.value
@@ -128,17 +127,18 @@ class Flow:
         start_time = time.time()
         current_step = self.start_step
         step_count = 0
+        last_error = None
         
         try:
             while current_step and step_count < 100:  # Prevent infinite loops
                 step_count += 1
                 
-                # Check timeout
-                if time.time() - start_time > self.config.timeout:
-                    return NodeResult(
-                        success=False,
-                        error=f"Flow timeout after {self.config.timeout} seconds"
-                    )
+                # Check timeout (default to 900 seconds if not set)
+                timeout = self.config.timeout if self.config.timeout is not None else 900
+                if time.time() - start_time > timeout:
+                    error_msg = f"Flow timeout after {timeout} seconds"
+                    self.logger.error(error_msg)
+                    return self._try_guaranteed_response(shared, error_msg)
                 
                 # Execute current step
                 step = self.steps[current_step]
@@ -149,7 +149,16 @@ class Flow:
                 
                 if not result.success:
                     self.logger.error(f"Step {current_step} failed: {result.error}")
-                    return result
+                    last_error = result.error
+                    # Store error in shared state for guaranteed response node
+                    shared.last_error = result.error
+                    # Try to route to guaranteed response if available
+                    if "guaranteed_response" in self.steps:
+                        self.logger.info("Routing to guaranteed response node due to step failure")
+                        current_step = "guaranteed_response"
+                        continue
+                    # Otherwise try guaranteed response and return
+                    return self._try_guaranteed_response(shared, result.error)
                 
                 # Determine next step
                 next_step = self._determine_next_step(current_step, result)
@@ -157,6 +166,12 @@ class Flow:
                 
                 if next_step in self.end_steps:
                     self.logger.info(f"Flow completed at end step: {next_step}")
+                    # Check if response was sent before finishing
+                    response_sent = getattr(shared, 'sender_have_gotten_response', False)
+                    if not response_sent and "guaranteed_response" in self.steps:
+                        self.logger.warning("Flow ending without response sent, routing to guaranteed response")
+                        current_step = "guaranteed_response"
+                        continue
                     return NodeResult(
                         success=True,
                         data=result.data,
@@ -165,16 +180,52 @@ class Flow:
                 
                 current_step = next_step
                 
-            return NodeResult(
-                success=False,
-                error=f"Flow exceeded maximum steps ({step_count})"
-            )
+            error_msg = f"Flow exceeded maximum steps ({step_count})"
+            self.logger.error(error_msg)
+            return self._try_guaranteed_response(shared, error_msg)
             
         except Exception as e:
             self.logger.error(f"Flow execution error: {str(e)}", exc_info=True)
+            shared.last_error = str(e)
+            return self._try_guaranteed_response(shared, str(e))
+    
+    def _try_guaranteed_response(self, shared: SharedState, error: str) -> NodeResult:
+        """
+        Attempt to send a guaranteed response before returning error.
+        
+        This method tries to find and execute a guaranteed_response node
+        to ensure the user receives a response even if the flow failed.
+        """
+        if "guaranteed_response" in self.steps:
+            try:
+                self.logger.info("Attempting to send guaranteed response")
+                guaranteed_step = self.steps["guaranteed_response"]
+                result = guaranteed_step.node.run(shared)
+                
+                if result.success:
+                    self.logger.info("Guaranteed response sent successfully")
+                    return NodeResult(
+                        success=True,
+                        data=result.data,
+                        metadata={"guaranteed_response": True, "original_error": error}
+                    )
+                else:
+                    self.logger.error(f"Guaranteed response also failed: {result.error}")
+                    return NodeResult(
+                        success=False,
+                        error=f"Flow failed: {error}. Guaranteed response also failed: {result.error}"
+                    )
+            except Exception as e:
+                self.logger.error(f"Exception while trying guaranteed response: {e}", exc_info=True)
+                return NodeResult(
+                    success=False,
+                    error=f"Flow failed: {error}. Guaranteed response exception: {str(e)}"
+                )
+        else:
+            self.logger.warning("No guaranteed_response node found, cannot send fallback response")
             return NodeResult(
                 success=False,
-                error=str(e)
+                error=error
             )
     
     def _determine_next_step(self, current_step: str, result: NodeResult) -> Optional[str]:
@@ -287,7 +338,7 @@ class FlowBuilder:
             nodes=[],
             flow_type=flow_type,
             requires_tokens=requires_tokens,
-            timeout=300  # 5 minutes default timeout
+            timeout=900  # 15 minutes default timeout (to allow for slow LLM calls)
         ))
     
     def add_step(self, name: str, node: Node, conditions: Optional[Dict[str, Callable]] = None) -> 'FlowBuilder':

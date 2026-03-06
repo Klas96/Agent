@@ -60,11 +60,13 @@ class ContentGenerationError(PocketFlowError):
         super().__init__(message, ErrorSeverity.MEDIUM, {"content_type": content_type})
 
 
-class BitcoinError(PocketFlowError):
-    """Error related to Bitcoin operations."""
-    
-    def __init__(self, message: str, address: Optional[str] = None):
-        super().__init__(message, ErrorSeverity.MEDIUM, {"address": address})
+# BitcoinError has been moved to bitcoin-MPC package
+# Import from bitcoin_mpc.errors if needed
+# class BitcoinError(PocketFlowError):
+#     """Error related to Bitcoin operations."""
+#     
+#     def __init__(self, message: str, address: Optional[str] = None):
+#         super().__init__(message, ErrorSeverity.MEDIUM, {"address": address})
 
 
 class DatabaseError(PocketFlowError):

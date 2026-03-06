@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from ...core.node import Node
 from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
+from ...utils.email_utils import build_threading_headers
 from ...services.email_service import EmailService
 from ...config.settings import get_settings
 
@@ -64,26 +65,24 @@ class PostProcessNode(Node):
             logger.info("Reply already sent to user, skipping post-process email")
             return True
         
-        # Set up proper reply headers for threading
-        original_message_id = result.get("message_id")
-        original_in_reply_to = result.get("in_reply_to")
-        original_references = result.get("references")
+        # Build deterministic threading headers using helper function
+        in_reply_to, references = build_threading_headers(
+            original_message_id=result.get("message_id"),
+            original_in_reply_to=result.get("in_reply_to"),
+            original_references=result.get("references"),
+            thread_id=result.get("thread_id"),
+            email_id=result.get("id")
+        )
         
-        # Use the original message ID for threading
-        in_reply_to = original_message_id
-        references = original_references or original_message_id
+        # Log threading headers for debugging
+        logger.info(f"Threading headers - In-Reply-To: {in_reply_to}, References: {references}")
+        logger.info(f"  Original message_id: {result.get('message_id')}")
+        logger.info(f"  Original in_reply_to: {result.get('in_reply_to')}")
+        logger.info(f"  Original references: {result.get('references')}")
         
-        # If we have original references, append the message ID
-        if original_references and original_message_id:
-            references = f"{original_references} {original_message_id}"
-        elif original_message_id:
-            references = original_message_id
-        
-        # Debug logging for threading headers
-        logger.info(f"Setting threading headers - in_reply_to: {in_reply_to}, references: {references}")
-        logger.info(f"Original email message_id: {original_message_id}")
-        logger.info(f"Original email in_reply_to: {original_in_reply_to}")
-        logger.info(f"Original email references: {original_references}")
+        # Warn if no threading identifier available
+        if not in_reply_to:
+            logger.error("No threading identifier available - email will not be threaded properly!")
         
         # Determine what happened and create appropriate response
         original_body = result.get("body", "")

@@ -116,24 +116,57 @@ class ContentService:
             return None
     
     def _generate_document(self, request: ContentGenerationRequest) -> Optional[str]:
-        """Generate document content using LaTeX templates."""
+        """Generate document content using Libriscribe MCP Server."""
         try:
-            # Use the new document service for LaTeX-based PDF generation
-            from .document_service import DocumentService
-            document_service = DocumentService()
+            # Use Libriscribe MCP Server instead of internal document generation
+            from .mcp_client import LibriscribeMCPClient
             
-            pdf_path = document_service.generate_document(request)
+            libriscribe = LibriscribeMCPClient()
+            
+            # Check if Libriscribe is available
+            if not libriscribe.health_check():
+                self.logger.warning("Libriscribe MCP Server not available, falling back to internal generation")
+                # Fallback to internal generation if Libriscribe is down
+                from .document_service import DocumentService
+                document_service = DocumentService()
+                return document_service.generate_document(request)
+            
+            # Determine document type from prompt
+            prompt_lower = request.prompt.lower()
+            if any(word in prompt_lower for word in ["business", "financial", "market", "company"]):
+                doc_type = "business_report"
+            elif any(word in prompt_lower for word in ["technical", "research", "analysis", "data"]):
+                doc_type = "technical_report"
+            else:
+                doc_type = "report"
+            
+            # Generate document via Libriscribe
+            pdf_path = libriscribe.generate_document(
+                prompt=request.prompt,
+                document_type=doc_type
+            )
             
             if pdf_path:
-                self.logger.info(f"Document generated: {pdf_path}")
+                self.logger.info(f"Document generated via Libriscribe: {pdf_path}")
                 return pdf_path
             else:
-                self.logger.error("Document generation failed")
-                return None
+                self.logger.error("Document generation via Libriscribe failed")
+                # Fallback to internal generation
+                self.logger.info("Falling back to internal document generation")
+                from .document_service import DocumentService
+                document_service = DocumentService()
+                return document_service.generate_document(request)
                 
         except Exception as e:
             self.logger.error(f"Document generation error: {e}")
-            return None
+            # Fallback to internal generation on error
+            try:
+                from .document_service import DocumentService
+                document_service = DocumentService()
+                return document_service.generate_document(request)
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback document generation also failed: {fallback_error}")
+                return None
     
     def _generate_podcast(self, request: ContentGenerationRequest) -> Optional[str]:
         """Generate podcast content."""

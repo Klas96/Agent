@@ -12,7 +12,8 @@ from ..core.flow import FlowRouter
 from ..utils.logging import get_logger
 from .email_processor import email_processor_flow
 from .tokenless_user import tokenless_user_flow
-from .content_generation import ContentGenerationFlow
+# ContentGenerationFlow removed - use email_processor with MPC nodes
+# from .content_generation import ContentGenerationFlow
 from .tool_flow import ToolFlow
 
 
@@ -24,7 +25,7 @@ class FlowManager:
         self._flows = {
             "email_processor": email_processor_flow,
             "tokenless_user": tokenless_user_flow,
-            "content_generation": ContentGenerationFlow(),
+            # "content_generation": ContentGenerationFlow(),  # Removed - use email_processor with MPC
             "tool_flow": ToolFlow()
         }
         self._router = FlowRouter()
@@ -55,13 +56,9 @@ class FlowManager:
                 "document", "write", "podcast", "audio", "episode"
             ]
             
-            # Check if the email contains content generation keywords
-            detected_keywords = [keyword for keyword in content_keywords if keyword in body]
-            if detected_keywords:
-                self.logger.info(f"Content generation request detected for {user_email}")
-                self.logger.info(f"Detected keywords: {detected_keywords}")
-                self.logger.info(f"Auto-selected flow: content_generation")
-                return "content_generation"
+            # Content generation is now handled via MPC in email_processor flow
+            # All requests go through email_processor which routes to MPC nodes
+            # No need for separate content_generation flow
             
             # Use donation-only approach - tokens system is deprecated
             # All users get the same flow regardless of token status

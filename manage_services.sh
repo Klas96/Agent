@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # PocketFlow Service Management Script
-# Manages both the PocketFlow agent and control panel services
+# Manages the PocketFlow agent service
 
 set -e
 
@@ -30,8 +30,7 @@ print_header() {
 
 # Service names
 AGENT_SERVICE="pocketflow"
-CONTROL_PANEL_SERVICE="pocketflow-control-panel"
-SERVICES=("$AGENT_SERVICE" "$CONTROL_PANEL_SERVICE")
+SERVICES=("$AGENT_SERVICE")
 
 # Check if running as root
 check_root() {
@@ -56,8 +55,6 @@ show_status() {
     echo ""
     print_status "Service Details:"
     systemctl status "$AGENT_SERVICE" --no-pager -l
-    echo ""
-    systemctl status "$CONTROL_PANEL_SERVICE" --no-pager -l
 }
 
 # Start services
@@ -134,9 +131,6 @@ show_logs() {
         echo ""
         print_status "PocketFlow Agent logs:"
         journalctl -u "$AGENT_SERVICE" --no-pager -n 20
-        echo ""
-        print_status "Control Panel logs:"
-        journalctl -u "$CONTROL_PANEL_SERVICE" --no-pager -n 20
     else
         print_header "Logs for $service"
         journalctl -u "$service" -f
@@ -159,14 +153,6 @@ check_health() {
         fi
     done
     
-    # Check ports
-    if netstat -tlnp 2>/dev/null | grep -q ":5001 "; then
-        print_status "✅ Control Panel: Port 5001 is listening"
-    else
-        print_error "❌ Control Panel: Port 5001 not listening"
-        all_healthy=false
-    fi
-    
     # Check database
     if [ -f "/opt/pocketflow/data/pocketflow.db" ]; then
         print_status "✅ Database: /opt/pocketflow/data/pocketflow.db exists"
@@ -186,7 +172,6 @@ check_health() {
     echo ""
     if [ "$all_healthy" = true ]; then
         print_status "🎉 All services are healthy!"
-        print_status "Access the control panel at: http://localhost:5001/admin/"
     else
         print_error "⚠️ Some issues detected. Check logs for details."
     fi
@@ -212,7 +197,6 @@ Commands:
 
 Services:
     $AGENT_SERVICE          PocketFlow Email Agent
-    $CONTROL_PANEL_SERVICE  PocketFlow Control Panel
 
 Examples:
     sudo $0 status          # Show status of all services

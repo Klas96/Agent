@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from ...core.node import Node
 from ...core.types import SharedState, EmailSendRequest
 from ...utils.logging import get_logger
+from ...utils.email_utils import build_threading_headers
 from ...services.email_service import EmailService
 from ...config.settings import get_settings
 
@@ -40,55 +41,41 @@ class TokenlessResponseNode(Node):
             logger.error("Could not extract sender email from: %s", from_field)
             return None
         
-        # Get Bitcoin address for payment
-        btc_address = getattr(shared, 'btc_address', None)
-        
         # Get original email content
         original_body = email_data.get("body", "")
         original_subject = email_data.get("subject", "")
         
-        # Set up proper reply headers for threading
-        original_message_id = email_data.get("message_id")
-        original_in_reply_to = email_data.get("in_reply_to")
-        original_references = email_data.get("references")
+        # Build deterministic threading headers using helper function
+        in_reply_to, references = build_threading_headers(
+            original_message_id=email_data.get("message_id"),
+            original_in_reply_to=email_data.get("in_reply_to"),
+            original_references=email_data.get("references"),
+            thread_id=email_data.get("thread_id"),
+            email_id=email_data.get("id")
+        )
         
-        # Use the original message ID for threading
-        in_reply_to = original_message_id
-        references = original_references or original_message_id
+        # Log threading headers for debugging
+        logger.info(f"Threading headers - In-Reply-To: {in_reply_to}, References: {references}")
+        logger.info(f"  Original message_id: {email_data.get('message_id')}")
+        logger.info(f"  Original in_reply_to: {email_data.get('in_reply_to')}")
+        logger.info(f"  Original references: {email_data.get('references')}")
+        logger.info(f"  Original email_id: {email_data.get('id')}")
         
-        # If we have original references, append the message ID
-        if original_references and original_message_id:
-            references = f"{original_references} {original_message_id}"
-        elif original_message_id:
-            references = original_message_id
+        # Warn if no threading identifier available
+        if not in_reply_to:
+            logger.error("No threading identifier available - email will not be threaded properly!")
         
-        return email_service, sender_email, original_body, original_subject, btc_address, in_reply_to, references
+        return email_service, sender_email, original_body, original_subject, in_reply_to, references
     
     def exec(self, prep_result):
         """Execute by sending the tokenless response email."""
         if not prep_result:
             return None
             
-        email_service, sender_email, original_body, original_subject, btc_address, in_reply_to, references = prep_result
+        email_service, sender_email, original_body, original_subject, in_reply_to, references = prep_result
         
         # Create a helpful response for tokenless users
-        if btc_address:
-            response_body = f"""Hi there!
-
-Thank you for your message. I'd be happy to help you with your request!
-
-To get started, you'll need to purchase some tokens. You can do this by sending Bitcoin to the following address:
-
-**Bitcoin Address:** `{btc_address}`
-
-Once you've sent the payment, I'll be able to process your request and provide you with a detailed response.
-
-If you have any questions about the payment process, feel free to ask!
-
-Best regards,
-PocketFlow Assistant"""
-        else:
-            response_body = f"""Hi there!
+        response_body = f"""Hi there!
 
 Thank you for your message. I'd be happy to help you with your request!
 

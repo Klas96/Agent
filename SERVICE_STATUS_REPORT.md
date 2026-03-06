@@ -14,7 +14,6 @@
 |---------|--------|--------|---------------|
 | **pocketflow.service** | ⚠️ **Working with Errors** | Database schema issues | 14:47:49 |
 | **pocketflow-payment-monitor.service** | ✅ **Healthy** | None | 14:43:37 |
-| **pocketflow-control-panel.service** | ✅ **Healthy** | None | Aug 6 13:34 |
 | **btc-payment-monitor.service** | ❌ **Failing** | Electrum connection | 14:47:53 |
 
 ---
@@ -63,26 +62,7 @@ ERROR - Failed to check tokens for klas0holmgren@gmail.com: type object 'FlowTyp
 14:43:37 - No new payments detected
 ```
 
-### **3. Control Panel Service** ✅
-**Service**: `pocketflow-control-panel.service`  
-**Status**: Healthy and working  
-**Process ID**: 3077079  
-**Last Activity**: August 6, 13:34
-
-#### **✅ What's Working**
-- Web interface accessible
-- User management functionality
-- Admin API endpoints
-- User updates and additions
-
-#### **📊 Recent Activity**
-```
-Aug 6 13:34 - GET /admin/users HTTP/1.1 200
-Aug 5 16:56 - Successfully added user: mck@live.se with 10 tokens
-Aug 5 16:55 - GET /admin/users/add HTTP/1.1 200
-```
-
-### **4. BTC Payment Monitor** ❌
+### **3. BTC Payment Monitor** ❌
 **Service**: `btc-payment-monitor.service`  
 **Status**: Failing - Electrum connection issues  
 **Process ID**: 1949738  
@@ -132,11 +112,6 @@ ERROR - Failed to establish a new connection: [Errno 111] Connection refused
 - **PocketFlow Payments**: ✅ Healthy (0 address mappings)
 - **Bitcoin Payments**: ❌ Disabled (Electrum down)
 
-### **Control Panel**
-- **Web Interface**: ✅ Accessible
-- **User Management**: ✅ Functional
-- **API Endpoints**: ✅ Working
-
 ---
 
 ## 🛠️ **Recommended Actions**
@@ -177,14 +152,12 @@ ERROR - Failed to establish a new connection: [Errno 111] Connection refused
 ### **Running Services**
 - ✅ `pocketflow.service` - Main email processing
 - ✅ `pocketflow-payment-monitor.service` - Payment monitoring
-- ✅ `pocketflow-control-panel.service` - Web interface
 - ❌ `btc-payment-monitor.service` - Bitcoin monitoring (failing)
 
 ### **Service Dependencies**
 - **Database**: SQLite (`/opt/pocketflow/data/pocketflow.db`)
 - **Email**: IMAP (Lopia)
 - **Electrum**: Bitcoin wallet (not running)
-- **Web**: Flask control panel
 
 ---
 

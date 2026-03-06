@@ -26,7 +26,6 @@ class SharedState(BaseModel):
     conversations: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict, description="All conversations by thread")
     generated_file_path: Optional[str] = Field(default=None, description="Path to last generated file")
     last_error: Optional[str] = Field(default=None, description="Last error message")
-    btc_address: Optional[str] = Field(default=None, description="User's Bitcoin address for donations")
     flow_type: Optional[str] = Field(default=None, description="Type of flow being executed")
     action_queue: Optional[List[Dict[str, Any]]] = Field(default=None, description="Queue of actions to be processed")
     agent_action: Optional[Dict[str, Any]] = Field(default=None, description="Current agent action being processed")
@@ -119,14 +118,6 @@ class InvestigationRequest(BaseModel):
     max_results: int = Field(default=5, description="Maximum number of results")
 
 
-class PaymentRequest(BaseModel):
-    """Request for Bitcoin payment."""
-    amount_usd: float = Field(description="Amount in USD")
-    user_email: str = Field(description="User email address")
-    btc_address: str = Field(description="Bitcoin address for payment")
-    description: str = Field(description="Payment description")
-
-
 class User(BaseModel):
     """User data structure."""
     email: str = Field(description="User email address")
@@ -136,22 +127,6 @@ class User(BaseModel):
     updated_at: str = Field(description="When user was last updated")
 
 
-class BTCAddress(BaseModel):
-    """Bitcoin address data structure."""
-    id: int = Field(description="Address ID")
-    email: str = Field(description="User email")
-    address: str = Field(description="Bitcoin address")
-    created_at: str = Field(description="When address was created")
-
-
-class DonationTransaction(BaseModel):
-    """Bitcoin donation transaction."""
-    id: int = Field(description="Transaction ID")
-    email: str = Field(description="User email")
-    btc_amount: Optional[float] = Field(default=None, description="Amount in BTC")
-    usd_amount: Optional[float] = Field(default=None, description="Amount in USD")
-    tx_id: str = Field(description="Bitcoin transaction ID")
-    timestamp: str = Field(description="Transaction timestamp")
     created_at: str = Field(description="When record was created")
 
 
@@ -161,7 +136,7 @@ class FlowConfig(BaseModel):
     description: Optional[str] = Field(default=None, description="Flow description")
     nodes: List[str] = Field(description="List of node names in order")
     routing: Dict[str, Dict[str, str]] = Field(default_factory=dict, description="Routing rules")
-    timeout: Optional[int] = Field(default=None, description="Flow timeout in seconds")
+    timeout: Optional[int] = Field(default=900, description="Flow timeout in seconds (default 15 minutes)")
     flow_type: FlowType = Field(description="Type of flow")
     requires_tokens: bool = Field(description="Whether this flow requires tokens")
     
